@@ -4,7 +4,7 @@ from models.MessageInfos import MessageInfos
 from models.enums.MoodType import MoodType
 from models.enums.EnergyPleasantnessType import MoodQuadrant, EnergyLevel, Pleasantness
 
-class MessageDay:
+class MessagesDays:
     """Daily messages schema"""
     def __init__(
         self,
@@ -77,7 +77,7 @@ class MessageDay:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MessageDay':
+    def from_dict(cls, data: Dict[str, Any]) -> 'MessagesDays':
         return cls(
             BLEOId=data.get("BLEOId"),
             date=data.get("date"),

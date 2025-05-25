@@ -227,7 +227,7 @@ class UserDetailView(APIView):
             # Get database connections
             db_users = MongoDB.get_instance().get_collection('Users')
             db_links = MongoDB.get_instance().get_collection('Links')
-            db_message_days = MongoDB.get_instance().get_collection('MessageDays')
+            db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             
             # First check if user exists
             user = db_users.find_one({"BLEOId": bleoid_int})
@@ -250,7 +250,7 @@ class UserDetailView(APIView):
             # STEP 3: Delete the user's own link where they are BLEOIdPartner1
             db_links.delete_one({"BLEOIdPartner1": bleoid_int})
             
-            # STEP 4: Delete all MessageDays associated with this user
+            # STEP 4: Delete all MessagesDays associated with this user
             message_days_result = db_message_days.delete_many({"BLEOId": bleoid_int})
             message_days_count = message_days_result.deleted_count
             

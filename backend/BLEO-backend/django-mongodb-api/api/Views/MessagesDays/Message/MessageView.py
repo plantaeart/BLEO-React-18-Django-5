@@ -3,10 +3,15 @@ from rest_framework import status
 from utils.mongodb_utils import MongoDB
 from datetime import datetime
 from models.response.BLEOResponse import BLEOResponse
-
+from models.enums.MessageType import MessageType
 
 class MessageOperationsView(APIView):
     """API view for operations on messages within a message day"""
+    
+    def _validate_message_type(self, msg_type):
+        """Validate that the message type is part of the enum"""
+        valid_types = [item.value for item in MessageType]
+        return msg_type in valid_types
     
     def get_message_day(self, bleoid, date):
         """Get message day by BLEOId and date"""
@@ -17,7 +22,7 @@ class MessageOperationsView(APIView):
             # Midnight timestamp
             message_date = datetime(date_obj.year, date_obj.month, date_obj.day)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
             return db.find_one({
                 "BLEOId": bleoid_int,
                 "date": message_date
@@ -40,7 +45,7 @@ class MessageOperationsView(APIView):
                     message=f"No message day found for BLEOId={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
             
             if message_id is not None:
                 # Update specific message by ID
@@ -58,6 +63,12 @@ class MessageOperationsView(APIView):
                         message=f"Message with ID {message_id} not found"
                     ).to_response(status.HTTP_404_NOT_FOUND)
                 
+                # Validate message type if present
+                if 'type' in data and not self._validate_message_type(data['type']):
+                    return BLEOResponse.validation_error(
+                        message=f"Invalid message type: '{data['type']}'. Valid types are: {', '.join([item.value for item in MessageType])}"
+                    ).to_response(status.HTTP_400_BAD_REQUEST)
+                
                 # Update the message
                 data['id'] = message_id  # Ensure ID remains the same
                 messages[message_index] = data
@@ -72,6 +83,13 @@ class MessageOperationsView(APIView):
             else:
                 # Replace all messages - generate IDs for new messages
                 new_messages = data.get('messages', [])
+                
+                # Validate message types
+                for i, msg in enumerate(new_messages):
+                    if 'type' in msg and not self._validate_message_type(msg['type']):
+                        return BLEOResponse.validation_error(
+                            message=f"Message at index {i} has invalid type: '{msg['type']}'. Valid types are: {', '.join([item.value for item in MessageType])}"
+                        ).to_response(status.HTTP_400_BAD_REQUEST)
                 
                 # Generate IDs for any messages that don't have them
                 processed_messages = []
@@ -129,7 +147,7 @@ class MessageOperationsView(APIView):
                     message=f"No message day found for BLEOId={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
             
             if message_id is not None:
                 # Delete specific message by ID
@@ -189,7 +207,7 @@ class MessageOperationsView(APIView):
                     message=f"No message day found for BLEOId={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
             
             # Get current messages
             current_messages = message_day.get('messages', [])
@@ -217,6 +235,10 @@ class MessageOperationsView(APIView):
                     
                 if 'type' not in msg or not msg['type']:
                     missing_fields.append('type')
+                elif not self._validate_message_type(msg['type']):
+                    return BLEOResponse.validation_error(
+                        message=f"Invalid message type: '{msg['type']}'. Valid types are: {', '.join([item.value for item in MessageType])}"
+                    ).to_response(status.HTTP_400_BAD_REQUEST)
                     
                 if missing_fields:
                     index_info = f"at index {i}" if len(new_messages) > 1 else ""
@@ -315,7 +337,7 @@ class MessageOperationsView(APIView):
             # Case 1: All messages for this user across all dates
             else:
                 bleoid_int = int(bleoid)
-                db = MongoDB.get_instance().get_collection('MessageDays')
+                db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
                 
                 # Find all message days for this user
                 message_days = list(db.find({"BLEOId": bleoid_int}))

@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework import status
-from models.MessageDay import MessageDay
+from models.MessagesDays import MessagesDays
 from utils.mongodb_utils import MongoDB
 from bson import ObjectId
 from datetime import datetime, timedelta
@@ -84,7 +84,7 @@ class MessageDayListCreateView(APIView):
                 filter_criteria['pleasantness'] = pleasantness
             
             # Query database
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             message_days = list(db.find(filter_criteria))
             
             # Convert ObjectId to string for JSON serialization
@@ -136,7 +136,7 @@ class MessageDayListCreateView(APIView):
             message_date = datetime(now.year, now.month, now.day)
             
             # Check if entry already exists for this user and date using exact date match
-            db_message_days = MongoDB.get_instance().get_collection('MessageDays')
+            db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             existing_entry = db_message_days.find_one({
                 "BLEOId": bleoid,
                 "date": message_date
@@ -152,8 +152,8 @@ class MessageDayListCreateView(APIView):
             messages = data.get('messages', [])
             processed_messages = _generate_message_ids(messages)
             
-            # Create MessageDay instance with midnight date
-            message_day = MessageDay(
+            # Create MessagesDays instance with midnight date
+            message_day = MessagesDays(
                 BLEOId=bleoid,
                 date=message_date,
                 messages=processed_messages,
@@ -197,7 +197,7 @@ class MessageDayDetailView(APIView):
             start_of_day = datetime(date_obj.year, date_obj.month, date_obj.day)
             end_of_day = start_of_day + timedelta(days=1, microseconds=-1)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             return db.find_one({
                 "BLEOId": bleoid_int,
                 "date": {"$gte": start_of_day, "$lte": end_of_day}
@@ -209,7 +209,7 @@ class MessageDayDetailView(APIView):
         """Get message days for a specific BLEOId"""
         try:
             bleoid_int = int(bleoid)
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             return list(db.find({"BLEOId": bleoid_int}))
         except (ValueError, TypeError):
             return None
@@ -221,7 +221,7 @@ class MessageDayDetailView(APIView):
             start_of_day = datetime(date_obj.year, date_obj.month, date_obj.day)
             end_of_day = start_of_day + timedelta(days=1, microseconds=-1)
             
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             return list(db.find({
                 "date": {"$gte": start_of_day, "$lte": end_of_day}
             }))
@@ -320,7 +320,7 @@ class MessageDayDetailView(APIView):
                 del data['date']
             
             # Update the document
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             result = db.update_one(
                 {"_id": message_day['_id']},
                 {"$set": data}
@@ -361,7 +361,7 @@ class MessageDayDetailView(APIView):
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Delete the document
-            db = MongoDB.get_instance().get_collection('MessageDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')
             db.delete_one({"_id": message_day['_id']})
             
             return BLEOResponse.success(
@@ -458,7 +458,7 @@ class MessageDayCreateView(APIView):
             message_date = datetime(now.year, now.month, now.day)
             
             # Check if entry already exists for this user and date using exact date match
-            db_message_days = MongoDB.get_instance().get_collection('MessageDays')
+            db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             existing_entry = db_message_days.find_one({
                 "BLEOId": bleoid,
                 "date": message_date
@@ -474,8 +474,8 @@ class MessageDayCreateView(APIView):
             messages = data.get('messages', [])
             processed_messages = _generate_message_ids(messages)
             
-            # Create MessageDay instance with midnight date
-            message_day = MessageDay(
+            # Create MessagesDays instance with midnight date
+            message_day = MessagesDays(
                 BLEOId=bleoid,
                 date=message_date,
                 messages=processed_messages,

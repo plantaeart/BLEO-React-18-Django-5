@@ -53,8 +53,12 @@ LINK_SCHEMA = {
 
 MESSAGE_INFOS_SCHEMA = {
     "bsonType": "object",
-    "required": ["title", "text", "type"],
+    "required": ["id", "title", "text", "type"],  # Added id as required field
     "properties": {
+        "id": {
+            "bsonType": "int",
+            "description": "Unique integer ID for the message"
+        },
         "title": {
             "bsonType": "string",
             "description": "Message title"
@@ -92,8 +96,16 @@ MESSAGE_DAY_SCHEMA = {
                 "items": MESSAGE_INFOS_SCHEMA
             },
             "mood": {
-                "bsonType": "string",
+                "bsonType": ["string", "null"],
                 "description": "Mood for the day"
+            },
+            "energy_level": {  # Added energy_level field
+                "bsonType": ["string", "null"],
+                "description": "Energy level for the day (high/low)"
+            },
+            "pleasantness": {  # Added pleasantness field
+                "bsonType": ["string", "null"],
+                "description": "Pleasantness level for the day (pleasant/unpleasant)"
             }
         }
     }

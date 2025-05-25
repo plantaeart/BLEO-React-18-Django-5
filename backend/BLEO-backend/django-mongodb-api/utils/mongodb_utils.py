@@ -71,8 +71,8 @@ class MongoDB:
             )
         
         # Message days collection
-        if "Messages_day" not in collection_names:
-            self._db.create_collection("Messages_day", validator=MESSAGE_DAY_SCHEMA)
+        if "MessagesDays" not in collection_names:
+            self._db.create_collection("MessagesDays", validator=MESSAGE_DAY_SCHEMA)
             # Create compound index for BLEOId and date
             self._db.message_days.create_index(
                 [("BLEOId", ASCENDING), ("date", ASCENDING)], 
