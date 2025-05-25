@@ -1,16 +1,18 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
-from enums import MessageType
+from .enums.MessageType import MessageType
 
 class MessageInfos:
     """Message information schema"""
     def __init__(
         self,
+        id: int,
         title: str,
         text: str,
         type: MessageType,
-        created_at: datetime = None
+        created_at: datetime = None,
     ):
+        self.id = id  # ID is now a required integer
         self.title = title
         self.text = text
         self.type = type
@@ -18,6 +20,7 @@ class MessageInfos:
     
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "id": self.id,
             "title": self.title,
             "text": self.text,
             "type": self.type,
@@ -27,6 +30,7 @@ class MessageInfos:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MessageInfos':
         return cls(
+            id=data.get("id"),  # This must be provided by MessageDaysView
             title=data.get("title"),
             text=data.get("text"),
             type=data.get("type"),

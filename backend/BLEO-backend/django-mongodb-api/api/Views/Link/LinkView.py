@@ -96,10 +96,10 @@ class LinkListCreateView(APIView):
             if 'created_at' in data and isinstance(data['created_at'], str):
                 try:
                     # Parse DD:MM:YYYY format
-                    created_at = datetime.strptime(data['created_at'], '%d:%m:%Y')
+                    created_at = datetime.strptime(data['created_at'], '%d-%m-%Y')
                 except ValueError:
                     return BLEOResponse.validation_error(
-                        message="Invalid date format, use DD:MM:YYYY"
+                        message="Invalid date format, use DD-MM-YYYY"
                     ).to_response(status.HTTP_400_BAD_REQUEST)
             else:
                 created_at = datetime.now()

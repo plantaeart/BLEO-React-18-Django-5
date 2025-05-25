@@ -214,7 +214,7 @@ class UserDetailView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def delete(self, request, bleoid):
-        """Delete a user by BLEOId and clean up related links"""
+        """Delete a user by BLEOId and clean up related data"""
         try:
             # Convert to integer for BLEOId lookup
             try:
@@ -227,6 +227,7 @@ class UserDetailView(APIView):
             # Get database connections
             db_users = MongoDB.get_instance().get_collection('Users')
             db_links = MongoDB.get_instance().get_collection('Links')
+            db_message_days = MongoDB.get_instance().get_collection('MessageDays')
             
             # First check if user exists
             user = db_users.find_one({"BLEOId": bleoid_int})
@@ -249,12 +250,16 @@ class UserDetailView(APIView):
             # STEP 3: Delete the user's own link where they are BLEOIdPartner1
             db_links.delete_one({"BLEOIdPartner1": bleoid_int})
             
-            # STEP 4: Finally delete the user
+            # STEP 4: Delete all MessageDays associated with this user
+            message_days_result = db_message_days.delete_many({"BLEOId": bleoid_int})
+            message_days_count = message_days_result.deleted_count
+            
+            # STEP 5: Finally delete the user
             result = db_users.delete_one({"BLEOId": bleoid_int})
             
             return BLEOResponse.success(
-                message="User deleted successfully"
-            ).to_response(status.HTTP_200_OK)  # Using 200 instead of 204 to include the success message
+                message=f"User deleted successfully. Also removed {message_days_count} message day records."
+            ).to_response(status.HTTP_200_OK)
             
         except Exception as e:
             return BLEOResponse.server_error(
