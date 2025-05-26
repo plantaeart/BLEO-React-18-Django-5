@@ -3,13 +3,13 @@
 USER_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOId", "mail", "password", "userName", "created_at"],
+        "required": ["BLEOId", "email", "password", "userName", "created_at"],
         "properties": {
             "BLEOId": {
-                "bsonType": "int",
-                "description": "Auto-generated unique BLEO identifier (integer)"
+                "bsonType": "string",
+                "description": "Unique BLEO identifier with format #XXXXXX"
             },
-            "mail": {
+            "email": {
                 "bsonType": "string",
                 "description": "User email"
             },
@@ -55,11 +55,11 @@ LINK_SCHEMA = {
         "required": ["BLEOIdPartner1", "status", "created_at", "updated_at"],
         "properties": {
             "BLEOIdPartner1": {
-                "bsonType": "int",
+                "bsonType": "string",
                 "description": "BLEO ID of first partner"
             },
             "BLEOIdPartner2": {
-                "bsonType": ["int", "null"], 
+                "bsonType": ["string", "null"],
                 "description": "BLEO ID of second partner (optional)"
             },
             "status": {
@@ -111,7 +111,7 @@ MESSAGE_DAY_SCHEMA = {
         "required": ["BLEOId", "date"],
         "properties": {
             "BLEOId": {
-                "bsonType": "int",
+                "bsonType": "string",
                 "description": "User BLEO identifier"
             },
             "date": {

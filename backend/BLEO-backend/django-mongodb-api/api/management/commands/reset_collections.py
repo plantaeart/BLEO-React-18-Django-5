@@ -49,9 +49,9 @@ class Command(BaseCommand):
             self.stdout.write("Creating Users collection...")
             db.create_collection("Users", validator=USER_SCHEMA)
             db.Users.create_index([("BLEOId", ASCENDING)], unique=True)
-            db.Users.create_index([("mail", ASCENDING)], unique=True)
+            db.Users.create_index([("email", ASCENDING)], unique=True)
             
-            # Links collection
+            # Links collection - same with string IDs
             self.stdout.write("Creating Links collection...")
             db.create_collection("Links", validator=LINK_SCHEMA)
             # Create index on BLEOIdPartner1

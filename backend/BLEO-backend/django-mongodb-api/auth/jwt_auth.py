@@ -32,7 +32,7 @@ class CustomTokenObtainPairView(APIView):
             
             # Get user from database
             db = MongoDB.get_instance().get_collection('Users')
-            user = db.find_one({"mail": email})
+            user = db.find_one({"email": email})
             
             if not user or not check_password(password, user['password']):
                 return BLEOResponse.validation_error(
@@ -42,13 +42,13 @@ class CustomTokenObtainPairView(APIView):
             # Create tokens with fixed datetime usage
             access_payload = {
                 'bleoid': user['BLEOId'],
-                'email': user['mail'],
+                'email': user['email'],
                 'exp': datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE)  # Fixed
             }
             
             refresh_payload = {
                 'bleoid': user['BLEOId'],
-                'email': user['mail'],
+                'email': user['email'],
                 'exp': datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE)  # Fixed
             }
             
@@ -67,7 +67,7 @@ class CustomTokenObtainPairView(APIView):
                     'refresh': refresh_token,
                     'user': {
                         'bleoid': user['BLEOId'],
-                        'email': user['mail'],
+                        'email': user['email'],
                         'username': user.get('userName', 'User')
                     }
                 },

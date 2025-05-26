@@ -28,8 +28,8 @@ class ConnectionRequestView(APIView):
                         message=f"Missing required field: {field}"
                     ).to_response(status.HTTP_400_BAD_REQUEST)
             
-            from_bleoid = int(data['from_bleoid'])
-            to_bleoid = int(data['to_bleoid'])
+            from_bleoid = data['from_bleoid']  # No need to cast to int
+            to_bleoid = data['to_bleoid']  # No need to cast to int
             
             # Check users exist
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -222,13 +222,6 @@ class ConnectionListView(APIView):
             if not bleoid:
                 return BLEOResponse.validation_error(
                     message="BLEOId parameter is required"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                bleoid = int(bleoid)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="BLEOId must be a number"
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
             # Build query

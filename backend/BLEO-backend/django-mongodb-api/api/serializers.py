@@ -9,7 +9,7 @@ class MessageInfosSerializer(serializers.Serializer):
 class UserSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     BLEOId = serializers.CharField(max_length=100)
-    mail = serializers.EmailField()
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
     profilePic = serializers.SerializerMethodField()
     

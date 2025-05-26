@@ -33,41 +33,37 @@ class UserListCreateView(APIView):
         try:
             data = request.data
             
-            # Validate required fields - BLEOId no longer required
-            required_fields = ['mail', 'password']
+            # Validate required fields
+            required_fields = ['email', 'password']
             for field in required_fields:
                 if field not in data:
                     return BLEOResponse.validation_error(
                         message=f"Missing required field: {field}"
                     ).to_response(status.HTTP_400_BAD_REQUEST)
             
-            # Hash the password
-            data['password'] = make_password(data['password'])
-            
-            # Auto-generate BLEOId as an incrementing integer
+            # Check if email already exists
             db_users = MongoDB.get_instance().get_collection('Users')
-
-            # Check if the user mail already exists, if yes, do not create a new user
-            existing_user = db_users.find_one({"mail": data['mail']})
-            if existing_user:
+            if db_users.find_one({"email": data['email']}):
                 return BLEOResponse.error(
                     error_type="DuplicateError",
-                    error_message="User with this email already exists"
+                    error_message="Email already exists"
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
-            # Find the highest existing BLEOId
-            highest_user = list(db_users.find({}, {"BLEOId": 1}).sort("BLEOId", -1).limit(1))
-            
-            # Get the next BLEOId
-            if highest_user and 'BLEOId' in highest_user[0]:
-                new_bleoid = highest_user[0]['BLEOId'] + 1
-            else:
-                new_bleoid = 1
-            
-            # Create user document
+            # Generate new BLEOId
+            while True:
+                new_bleoid = User.generate_bleoid()
+                # Check if ID already exists
+                if not db_users.find_one({"BLEOId": new_bleoid}):
+                    break
+        
+            # Hash password if it's not already hashed
+            if not data['password'].startswith('$2'):
+                data['password'] = make_password(data['password'])
+        
+            # Create user
             user = User(
                 BLEOId=new_bleoid,
-                mail=data['mail'],
+                email=data['email'],
                 password=data['password'],
                 userName=data.get('userName', "NewUser"),
                 profilePic=data.get('profilePic')
@@ -98,16 +94,6 @@ class UserDetailView(APIView):
     def get_object(self, bleoid):
         """Get a single user by BLEOId or MongoDB ObjectId"""
         db = MongoDB.get_instance().get_collection('Users')
-        
-        # Try to find by BLEOId (as int)
-        try:
-            # If it's an integer string, try to convert to int for BLEOId lookup
-            bleoid_as_int = int(bleoid)
-            user = db.find_one({"BLEOId": bleoid_as_int}, {'password': 0})
-            if user:
-                return user
-        except (ValueError, TypeError):
-            pass
         
         # If not found or not convertible to int, try as MongoDB ObjectId
         if ObjectId.is_valid(bleoid):
@@ -145,14 +131,6 @@ class UserDetailView(APIView):
             data = request.data
             db = MongoDB.get_instance().get_collection('Users')
             
-            # Convert to integer for BLEOId lookup
-            try:
-                bleoid_int = int(bleoid)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="Invalid BLEOId format, must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
             # Check if user exists
             user = self.get_object(bleoid)
             if user is None:
@@ -170,7 +148,7 @@ class UserDetailView(APIView):
         
             # Update user
             result = db.update_one(
-                {"BLEOId": bleoid_int}, 
+                {"BLEOId": bleoid}, 
                 {'$set': data}
             )
             
@@ -195,47 +173,39 @@ class UserDetailView(APIView):
     
     def delete(self, request, bleoid):
         """Delete a user by BLEOId and clean up related data"""
-        try:
-            # Convert to integer for BLEOId lookup
-            try:
-                bleoid_int = int(bleoid)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="Invalid BLEOId format, must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
+        try:         
             # Get database connections
             db_users = MongoDB.get_instance().get_collection('Users')
             db_links = MongoDB.get_instance().get_collection('Links')
             db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             
             # First check if user exists
-            user = db_users.find_one({"BLEOId": bleoid_int})
+            user = db_users.find_one({"BLEOId": bleoid})
             if not user:
                 return BLEOResponse.not_found(
                     message="User not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # STEP 1: Find any links where this user is BLEOIdPartner2
-            related_links = list(db_links.find({"BLEOIdPartner2": bleoid_int}))
+            related_links = list(db_links.find({"BLEOIdPartner2": bleoid}))
             
             # STEP 2: Update those links to set BLEOIdPartner2 to null
             if related_links:
                 result = db_links.update_many(
-                    {"BLEOIdPartner2": bleoid_int},
+                    {"BLEOIdPartner2": bleoid},
                     {"$set": {"BLEOIdPartner2": None}}
                 )
                 print(f"Updated {result.modified_count} links that referenced the deleted user")
             
             # STEP 3: Delete the user's own link where they are BLEOIdPartner1
-            db_links.delete_one({"BLEOIdPartner1": bleoid_int})
+            db_links.delete_one({"BLEOIdPartner1": bleoid})
             
             # STEP 4: Delete all MessagesDays associated with this user
-            message_days_result = db_message_days.delete_many({"BLEOId": bleoid_int})
+            message_days_result = db_message_days.delete_many({"BLEOId": bleoid})
             message_days_count = message_days_result.deleted_count
             
             # STEP 5: Finally delete the user
-            result = db_users.delete_one({"BLEOId": bleoid_int})
+            result = db_users.delete_one({"BLEOId": bleoid})
             
             return BLEOResponse.success(
                 message=f"User deleted successfully. Also removed {message_days_count} message day records."

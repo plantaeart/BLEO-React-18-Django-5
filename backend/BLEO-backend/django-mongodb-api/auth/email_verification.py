@@ -20,7 +20,7 @@ class EmailVerificationView(APIView):
             # Update user's email verification status
             db = MongoDB.get_instance().get_collection('Users')
             result = db.update_one(
-                {"mail": email},
+                {"email": email},
                 {"$set": {"email_verified": True}}
             )
             

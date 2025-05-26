@@ -21,7 +21,7 @@ class PasswordResetRequestView(APIView):
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
             db = MongoDB.get_instance().get_collection('Users')
-            user = db.find_one({"mail": email})
+            user = db.find_one({"email": email})
             
             if not user:
                 # Don't reveal if user exists or not for security
@@ -94,7 +94,7 @@ class PasswordResetConfirmView(APIView):
             # Update user's password
             db_users = MongoDB.get_instance().get_collection('Users')
             result = db_users.update_one(
-                {"mail": reset["email"]},
+                {"email": reset["email"]},
                 {"$set": {"password": make_password(new_password)}}
             )
             

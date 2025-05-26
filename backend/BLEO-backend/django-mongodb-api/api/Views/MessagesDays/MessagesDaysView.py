@@ -49,7 +49,7 @@ class MessageDayListCreateView(APIView):
             
             if bleoid:
                 try:
-                    filter_criteria['BLEOId'] = int(bleoid)
+                    filter_criteria['BLEOId'] = bleoid
                 except ValueError:
                     return BLEOResponse.validation_error(
                         message="Invalid BLEOId format, must be a number"
@@ -116,7 +116,7 @@ class MessageDayListCreateView(APIView):
             
             # Convert BLEOId to integer
             try:
-                bleoid = int(data['BLEOId'])
+                bleoid = data['BLEOId']
             except (ValueError, TypeError):
                 return BLEOResponse.validation_error(
                     message="BLEOId must be a number"
@@ -190,7 +190,7 @@ class MessageDayDetailView(APIView):
     def get_by_bleoid_and_date(self, bleoid, date):
         """Get a message day by BLEOId and date"""
         try:
-            bleoid_int = int(bleoid)
+            bleoid_int = bleoid
             date_obj = datetime.strptime(date, '%d-%m-%Y')
             
             # Define start and end of the day
@@ -208,7 +208,7 @@ class MessageDayDetailView(APIView):
     def get_by_bleoid(self, bleoid):
         """Get message days for a specific BLEOId"""
         try:
-            bleoid_int = int(bleoid)
+            bleoid_int = bleoid
             db = MongoDB.get_instance().get_collection('MessagesDays')
             return list(db.find({"BLEOId": bleoid_int}))
         except (ValueError, TypeError):

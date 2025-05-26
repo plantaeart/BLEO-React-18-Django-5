@@ -16,7 +16,7 @@ class MessageOperationsView(APIView):
     def get_message_day(self, bleoid, date):
         """Get message day by BLEOId and date"""
         try:
-            bleoid_int = int(bleoid)
+            bleoid_int = bleoid
             date_obj = datetime.strptime(date, '%d-%m-%Y')
             
             # Midnight timestamp
@@ -336,7 +336,7 @@ class MessageOperationsView(APIView):
                 
             # Case 1: All messages for this user across all dates
             else:
-                bleoid_int = int(bleoid)
+                bleoid_int = bleoid
                 db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
                 
                 # Find all message days for this user

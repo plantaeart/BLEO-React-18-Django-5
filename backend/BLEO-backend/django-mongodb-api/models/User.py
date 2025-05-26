@@ -1,13 +1,15 @@
 from bson.binary import Binary
 from typing import Dict, Any, Optional
 from datetime import datetime
+import random
+import string
 
 class User:
     """User schema"""
     def __init__(
         self,
-        BLEOId: int,
-        mail: str,
+        BLEOId: str,
+        email: str,
         password: str,
         userName: str = "NewUser",
         profilePic: Optional[Binary] = None,
@@ -18,7 +20,7 @@ class User:
         preferences: Optional[Dict[str, Any]] = None
     ):
         self.BLEOId = BLEOId
-        self.mail = mail
+        self.email = email
         self.password = password
         self.userName = userName
         self.profilePic = profilePic
@@ -31,7 +33,7 @@ class User:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "BLEOId": self.BLEOId,
-            "mail": self.mail,
+            "email": self.email,
             "password": self.password,
             "userName": self.userName,
             "profilePic": self.profilePic,
@@ -46,7 +48,7 @@ class User:
     def from_dict(cls, data: Dict[str, Any]) -> 'User':
         return cls(
             BLEOId=data.get("BLEOId"),
-            mail=data.get("mail"),
+            email=data.get("email"),
             password=data.get("password"),
             userName=data.get("userName", "NewUser"),
             profilePic=data.get("profilePic"),
@@ -56,3 +58,10 @@ class User:
             bio=data.get("bio"),
             preferences=data.get("preferences")
         )
+    
+    @staticmethod
+    def generate_bleoid() -> str:
+        """Generate a random BLEOId with format #XXXXXX"""
+        chars = string.ascii_uppercase + string.digits
+        random_part = ''.join(random.choice(chars) for _ in range(6))
+        return f"{random_part}"
