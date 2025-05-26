@@ -81,26 +81,6 @@ class UserListCreateView(APIView):
             del created_user['password']  # Remove password from response
             created_user['_id'] = str(result.inserted_id)
             
-            # Automatically create a link for this user with BLEOIdPartner2 as null
-            try:
-                from models.Link import Link
-                from datetime import datetime
-                
-                link = Link(
-                    BLEOIdPartner1=new_bleoid,
-                    BLEOIdPartner2=None,  # Initially null
-                    created_at=datetime.now()
-                )
-                
-                # Save the link to MongoDB
-                db_links = MongoDB.get_instance().get_collection('Links')
-                db_links.insert_one(link.to_dict())
-                
-                # No need to return the link info, just the user
-            except Exception as link_error:
-                # Log the error but don't fail user creation
-                print(f"Warning: Failed to create link for new user: {str(link_error)}")
-        
             return BLEOResponse.success(
                 data=created_user,
                 message="User created successfully"

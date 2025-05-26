@@ -56,28 +56,18 @@ class MongoDB:
         
         # Users collection
         if "Users" not in collection_names:
-            self._db.create_collection("Users", validator=USER_SCHEMA)
-            # Create unique index on BLEOId instead of id
-            self._db.users.create_index([("BLEOId", ASCENDING)], unique=True)
-            self._db.users.create_index([("mail", ASCENDING)], unique=True)
+            self._db.create_collection("Users")
+        self._db.command("collMod", "Users", validator=USER_SCHEMA)
         
         # Links collection
         if "Links" not in collection_names:
-            self._db.create_collection("Links", validator=LINK_SCHEMA)
-            # Create compound index for both partner IDs
-            self._db.links.create_index(
-                [("BLEOIdPartner1", ASCENDING), ("BLEOIdPartner2", ASCENDING)], 
-                unique=True
-            )
+            self._db.create_collection("Links")
+        self._db.command("collMod", "Links", validator=LINK_SCHEMA)
         
         # Message days collection
         if "MessagesDays" not in collection_names:
-            self._db.create_collection("MessagesDays", validator=MESSAGE_DAY_SCHEMA)
-            # Create compound index for BLEOId and date
-            self._db.message_days.create_index(
-                [("BLEOId", ASCENDING), ("date", ASCENDING)], 
-                unique=True
-            )
+            self._db.create_collection("MessagesDays")
+        self._db.command("collMod", "MessagesDays", validator=MESSAGE_DAY_SCHEMA)
     
     def get_db(self):
         return self._db

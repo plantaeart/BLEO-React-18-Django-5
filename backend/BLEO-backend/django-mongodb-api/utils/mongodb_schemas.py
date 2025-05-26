@@ -1,10 +1,9 @@
 # MongoDB schema validators
 
-# In USER_SCHEMA, add userName to properties
 USER_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOId", "mail", "password"],
+        "required": ["BLEOId", "mail", "password", "userName", "created_at"],
         "properties": {
             "BLEOId": {
                 "bsonType": "int",
@@ -25,6 +24,26 @@ USER_SCHEMA = {
             "profilePic": {
                 "bsonType": ["binData", "null"],
                 "description": "Profile picture binary data (optional)"
+            },
+            "email_verified": {
+                "bsonType": "bool",
+                "description": "Whether the user's email has been verified"
+            },
+            "last_login": {
+                "bsonType": ["date", "null"],
+                "description": "Last login timestamp"
+            },
+            "created_at": {
+                "bsonType": "date",
+                "description": "Account creation timestamp"
+            },
+            "bio": {
+                "bsonType": ["string", "null"],
+                "description": "User biography or profile description"
+            },
+            "preferences": {
+                "bsonType": ["object", "null"],
+                "description": "User preferences and settings"
             }
         }
     }
@@ -33,7 +52,7 @@ USER_SCHEMA = {
 LINK_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOIdPartner1"],
+        "required": ["BLEOIdPartner1", "status", "created_at", "updated_at"],
         "properties": {
             "BLEOIdPartner1": {
                 "bsonType": "int",
@@ -43,9 +62,17 @@ LINK_SCHEMA = {
                 "bsonType": ["int", "null"], 
                 "description": "BLEO ID of second partner (optional)"
             },
+            "status": {
+                "enum": ["pending", "accepted", "rejected", "blocked"],
+                "description": "Current status of the connection"
+            },
             "created_at": {
                 "bsonType": "date",
                 "description": "Link creation date"
+            },
+            "updated_at": {
+                "bsonType": "date",
+                "description": "Link last update date"
             }
         }
     }
@@ -53,7 +80,7 @@ LINK_SCHEMA = {
 
 MESSAGE_INFOS_SCHEMA = {
     "bsonType": "object",
-    "required": ["id", "title", "text", "type"],  # Added id as required field
+    "required": ["id", "title", "text", "type"],
     "properties": {
         "id": {
             "bsonType": "int",
@@ -99,13 +126,57 @@ MESSAGE_DAY_SCHEMA = {
                 "bsonType": ["string", "null"],
                 "description": "Mood for the day"
             },
-            "energy_level": {  # Added energy_level field
+            "energy_level": {
                 "bsonType": ["string", "null"],
                 "description": "Energy level for the day (high/low)"
             },
-            "pleasantness": {  # Added pleasantness field
+            "pleasantness": {
                 "bsonType": ["string", "null"],
                 "description": "Pleasantness level for the day (pleasant/unpleasant)"
+            }
+        }
+    }
+}
+
+# New schemas for authentication features
+
+PASSWORD_RESET_SCHEMA = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["email", "token", "expires"],
+        "properties": {
+            "email": {
+                "bsonType": "string",
+                "description": "User email for password reset"
+            },
+            "token": {
+                "bsonType": "string",
+                "description": "Unique token for password reset verification"
+            },
+            "expires": {
+                "bsonType": "date",
+                "description": "Token expiration timestamp"
+            }
+        }
+    }
+}
+
+TOKEN_BLACKLIST_SCHEMA = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["token", "created_at", "expires_at"],
+        "properties": {
+            "token": {
+                "bsonType": "string",
+                "description": "JWT refresh token that has been invalidated"
+            },
+            "created_at": {
+                "bsonType": "date",
+                "description": "When the token was added to blacklist"
+            },
+            "expires_at": {
+                "bsonType": "date",
+                "description": "When the token will expire (for cleanup)"
             }
         }
     }

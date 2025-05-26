@@ -1,6 +1,12 @@
 from django.core.management.base import BaseCommand
 from utils.mongodb_utils import MongoDB
-from utils.mongodb_schemas import USER_SCHEMA, LINK_SCHEMA, MESSAGE_DAY_SCHEMA
+from utils.mongodb_schemas import (
+    USER_SCHEMA, 
+    LINK_SCHEMA, 
+    MESSAGE_DAY_SCHEMA, 
+    PASSWORD_RESET_SCHEMA,
+    TOKEN_BLACKLIST_SCHEMA
+)
 from pymongo import ASCENDING
 
 class Command(BaseCommand):
@@ -52,13 +58,25 @@ class Command(BaseCommand):
             db.Links.create_index([("BLEOIdPartner1", ASCENDING)], unique=True)
             
             # Message days collection
-            self.stdout.write("Creating MessagesDays collection...")
-            db.create_collection("MessagesDays", validator=MESSAGE_DAY_SCHEMA)
+            self.stdout.write("Creating MessageDays collection...")
+            db.create_collection("MessageDays", validator=MESSAGE_DAY_SCHEMA)
             # Create compound index for BLEOId and date
-            db.MessagesDays.create_index(
+            db.MessageDays.create_index(
                 [("BLEOId", ASCENDING), ("date", ASCENDING)], 
                 unique=True
             )
+            
+            # Password reset collection
+            self.stdout.write("Creating PasswordResets collection...")
+            db.create_collection("PasswordResets", validator=PASSWORD_RESET_SCHEMA)
+            db.PasswordResets.create_index([("token", ASCENDING)], unique=True)
+            db.PasswordResets.create_index([("expires", ASCENDING)], expireAfterSeconds=0)
+            
+            # Token blacklist collection
+            self.stdout.write("Creating TokenBlacklist collection...")
+            db.create_collection("TokenBlacklist", validator=TOKEN_BLACKLIST_SCHEMA)
+            db.TokenBlacklist.create_index([("token", ASCENDING)], unique=True)
+            db.TokenBlacklist.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
             
             self.stdout.write(
                 self.style.SUCCESS("✅ Collections reset complete. All collections have been recreated with proper schema validation.")

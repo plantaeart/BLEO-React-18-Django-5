@@ -1,29 +1,34 @@
+from enum import Enum
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+class ConnectionStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    BLOCKED = "blocked"
+
 class Link:
-    """Link schema for connecting partners"""
+    """Connection between users"""
     def __init__(
         self,
         BLEOIdPartner1: int,
         BLEOIdPartner2: Optional[int] = None,
-        created_at: datetime = None
+        status: str = ConnectionStatus.PENDING.value,
+        created_at: datetime = None,
+        updated_at: datetime = None,
     ):
         self.BLEOIdPartner1 = BLEOIdPartner1
         self.BLEOIdPartner2 = BLEOIdPartner2
+        self.status = status
         self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
     
     def to_dict(self) -> Dict[str, Any]:
         return {
             "BLEOIdPartner1": self.BLEOIdPartner1,
             "BLEOIdPartner2": self.BLEOIdPartner2,
-            "created_at": self.created_at
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
         }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Link':
-        return cls(
-            BLEOIdPartner1=data.get("BLEOIdPartner1"),
-            BLEOIdPartner2=data.get("BLEOIdPartner2"),
-            created_at=data.get("created_at")
-        )
