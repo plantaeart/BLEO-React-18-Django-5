@@ -76,6 +76,16 @@ class UserSerializer(serializers.Serializer):
         # Example: Validate password strength
         if 'password' in data and len(data['password']) < 8:
             raise serializers.ValidationError({"password": "Password must be at least 8 characters long"})
+        data = super().validate(data)
+        
+        # Auto-generate BLEOId if requested and not provided
+        if self.context.get('auto_generate_id') and 'BLEOId' not in data:
+            import random
+            import string
+            # Generate a random 6-character ID (like your existing logic)
+            chars = string.ascii_uppercase + string.digits
+            data['BLEOId'] = ''.join(random.choice(chars) for _ in range(6))
+            
         return data
 
 class LinkSerializer(serializers.Serializer):

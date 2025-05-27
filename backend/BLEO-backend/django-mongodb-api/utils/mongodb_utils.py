@@ -13,11 +13,26 @@ class MongoDB:
     _client = None
     _db = None
     
+    # Collection mapping dictionary
+    COLLECTIONS = {
+        'Users': 'Users',
+        'Links': 'Links', 
+        'MessagesDays': 'MessagesDays',
+        'PasswordResets': 'PasswordResets',
+        'TokenBlacklist': 'TokenBlacklist'
+    }
+    
     @classmethod
     def get_instance(cls):
         if cls._instance is None:
             cls._instance = MongoDB()
         return cls._instance
+    
+    @classmethod
+    def get_client(cls):
+        if cls._instance is None:
+            cls._instance = MongoDB()
+        return cls._instance._client
 
     def __init__(self):
         # Get MongoDB connection details from environment variables
@@ -54,44 +69,110 @@ class MongoDB:
         # Check if collections exist, if not create them with validators
         collection_names = self._db.list_collection_names()
         
-        # Users collection
-        if "Users" not in collection_names:
-            self._db.create_collection("Users")
-        self._db.command("collMod", "Users", validator=USER_SCHEMA)
-        self._db.Users.create_index([("BLEOId", ASCENDING)], unique=True)
-        self._db.Users.create_index([("email", ASCENDING)], unique=True)
-        
-        # Links collection
-        if "Links" not in collection_names:
-            self._db.create_collection("Links")
-        self._db.command("collMod", "Links", validator=LINK_SCHEMA)
-        self._db.Links.create_index([("BLEOIdPartner1", ASCENDING)], unique=True)
-        
-        # Message days collection
-        if "MessagesDays" not in collection_names:
-            self._db.create_collection("MessagesDays")
-        self._db.command("collMod", "MessagesDays", validator=MESSAGE_DAY_SCHEMA)
-        self._db.MessagesDays.create_index(
-            [("BLEOId", ASCENDING), ("date", ASCENDING)], 
-            unique=True
-        )
-        
-        # Password reset collection - add this
-        if "PasswordResets" not in collection_names:
-            self._db.create_collection("PasswordResets")
-        self._db.command("collMod", "PasswordResets", validator=PASSWORD_RESET_SCHEMA)
-        self._db.PasswordResets.create_index([("token", ASCENDING)], unique=True)
-        self._db.PasswordResets.create_index([("expires", ASCENDING)], expireAfterSeconds=0)
-        
-        # Token blacklist collection - add this
-        if "TokenBlacklist" not in collection_names:
-            self._db.create_collection("TokenBlacklist")
-        self._db.command("collMod", "TokenBlacklist", validator=TOKEN_BLACKLIST_SCHEMA)
-        self._db.TokenBlacklist.create_index([("token", ASCENDING)], unique=True)
-        self._db.TokenBlacklist.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+        # Initialize each collection if it doesn't exist
+        for collection in self.COLLECTIONS.values():
+            if collection not in collection_names:
+                self.setup_collection(collection, create=True)
+            else:
+                self.setup_collection(collection, create=False)
     
+    def setup_collection(self, collection_name, create=True, verbose=False):
+        """Set up a collection with its schema and indexes
+        
+        Args:
+            collection_name: Name of the collection to set up
+            create: Whether to create the collection (True) or just update schema/indexes (False)
+            verbose: Whether to print verbose output
+        """
+        if verbose:
+            print(f"Setting up collection: {collection_name}")
+            
+        # Create the collection if requested
+        if create:
+            if verbose:
+                print(f"Creating collection: {collection_name}")
+            
+            # Select the right schema based on collection name
+            if collection_name == self.COLLECTIONS['Users']:
+                self._db.create_collection(collection_name, validator=USER_SCHEMA)
+            elif collection_name == self.COLLECTIONS['Links']:
+                self._db.create_collection(collection_name, validator=LINK_SCHEMA)
+            elif collection_name == self.COLLECTIONS['MessagesDays']:
+                self._db.create_collection(collection_name, validator=MESSAGE_DAY_SCHEMA)
+            elif collection_name == self.COLLECTIONS['PasswordResets']:
+                self._db.create_collection(collection_name, validator=PASSWORD_RESET_SCHEMA)
+            elif collection_name == self.COLLECTIONS['TokenBlacklist']:
+                self._db.create_collection(collection_name, validator=TOKEN_BLACKLIST_SCHEMA)
+        else:
+            # Just update the schema validation
+            if collection_name == self.COLLECTIONS['Users']:
+                self._db.command("collMod", collection_name, validator=USER_SCHEMA)
+            elif collection_name == self.COLLECTIONS['Links']:
+                self._db.command("collMod", collection_name, validator=LINK_SCHEMA)
+            elif collection_name == self.COLLECTIONS['MessagesDays']:
+                self._db.command("collMod", collection_name, validator=MESSAGE_DAY_SCHEMA)
+            elif collection_name == self.COLLECTIONS['PasswordResets']:
+                self._db.command("collMod", collection_name, validator=PASSWORD_RESET_SCHEMA)
+            elif collection_name == self.COLLECTIONS['TokenBlacklist']:
+                self._db.command("collMod", collection_name, validator=TOKEN_BLACKLIST_SCHEMA)
+        
+        # Create indexes (same regardless of create mode)
+        if collection_name == self.COLLECTIONS['Users']:
+            self._ensure_index(self._db[collection_name], [("BLEOId", ASCENDING)], unique=True)
+            self._ensure_index(self._db[collection_name], [("email", ASCENDING)], unique=True)
+            if verbose:
+                print("  - Created indexes on BLEOId and email")
+                
+        elif collection_name == self.COLLECTIONS['Links']:
+            self._ensure_index(self._db[collection_name], [("BLEOIdPartner1", ASCENDING)], unique=True)
+            if verbose:
+                print("  - Created index on BLEOIdPartner1")
+                
+        elif collection_name == self.COLLECTIONS['MessagesDays']:
+            self._ensure_index(
+                self._db[collection_name],
+                [("BLEOId", ASCENDING), ("date", ASCENDING)],
+                unique=True
+            )
+            if verbose:
+                print("  - Created compound index on BLEOId and date")
+                
+        elif collection_name == self.COLLECTIONS['PasswordResets']:
+            self._ensure_index(self._db[collection_name], [("token", ASCENDING)], unique=True)
+            self._ensure_index(self._db[collection_name], [("expires", ASCENDING)], expireAfterSeconds=0)
+            if verbose:
+                print("  - Created indexes on token and expires")
+                
+        elif collection_name == self.COLLECTIONS['TokenBlacklist']:
+            self._ensure_index(self._db[collection_name], [("token", ASCENDING)], unique=True)
+            self._ensure_index(self._db[collection_name], [("expires_at", ASCENDING)], expireAfterSeconds=0)
+            if verbose:
+                print("  - Created indexes on token and expires_at")
+    
+    def _ensure_index(self, collection, index_spec, unique=False, name=None, **kwargs):
+        """Safely create an index if it doesn't exist or matches existing definition"""
+        try:
+            collection.create_index(index_spec, unique=unique, name=name, **kwargs)
+        except Exception as e:
+            # If index already exists with different options, drop and recreate it
+            if "already exists with different options" in str(e) or "IndexKeySpecsConflict" in str(e):
+                # Find the existing index name
+                for idx in collection.list_indexes():
+                    key_items = list(idx['key'].items())
+                    index_spec_items = [(field[0], field[1]) for field in index_spec]
+                    if key_items == index_spec_items:
+                        idx_name = idx['name']
+                        print(f"Dropping existing index {idx_name} with different options")
+                        collection.drop_index(idx_name)
+                        collection.create_index(index_spec, unique=unique, name=name, **kwargs)
+                        return
+            else:
+                print(f"Error creating index: {e}")
+
     def get_db(self):
         return self._db
     
     def get_collection(self, collection_name):
-        return self._db[collection_name]
+        # Use the COLLECTIONS dictionary to get the actual collection name
+        actual_collection = self.COLLECTIONS.get(collection_name, collection_name)
+        return self._db[actual_collection]

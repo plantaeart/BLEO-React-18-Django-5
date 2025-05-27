@@ -22,7 +22,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             # Get MongoDB instance
-            db = MongoDB.get_instance().get_db()
+            mongo_instance = MongoDB.get_instance()
+            db = mongo_instance.get_db()
             
             # Get existing collections
             collections = db.list_collection_names()
@@ -43,40 +44,12 @@ class Command(BaseCommand):
             
             self.stdout.write(self.style.SUCCESS("All collections dropped successfully."))
             
-            # Recreate collections with schema validation
-            
-            # Users collection
-            self.stdout.write("Creating Users collection...")
-            db.create_collection("Users", validator=USER_SCHEMA)
-            db.Users.create_index([("BLEOId", ASCENDING)], unique=True)
-            db.Users.create_index([("email", ASCENDING)], unique=True)
-            
-            # Links collection - same with string IDs
-            self.stdout.write("Creating Links collection...")
-            db.create_collection("Links", validator=LINK_SCHEMA)
-            # Create index on BLEOIdPartner1
-            db.Links.create_index([("BLEOIdPartner1", ASCENDING)], unique=True)
-            
-            # Message days collection
-            self.stdout.write("Creating MessagesDays collection...")
-            db.create_collection("MessagesDays", validator=MESSAGE_DAY_SCHEMA)
-            # Create compound index for BLEOId and date
-            db.MessagesDays.create_index(
-                [("BLEOId", ASCENDING), ("date", ASCENDING)], 
-                unique=True
-            )
-            
-            # Password reset collection
-            self.stdout.write("Creating PasswordResets collection...")
-            db.create_collection("PasswordResets", validator=PASSWORD_RESET_SCHEMA)
-            db.PasswordResets.create_index([("token", ASCENDING)], unique=True)
-            db.PasswordResets.create_index([("expires", ASCENDING)], expireAfterSeconds=0)
-            
-            # Token blacklist collection
-            self.stdout.write("Creating TokenBlacklist collection...")
-            db.create_collection("TokenBlacklist", validator=TOKEN_BLACKLIST_SCHEMA)
-            db.TokenBlacklist.create_index([("token", ASCENDING)], unique=True)
-            db.TokenBlacklist.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+            # Recreate collections with schema validation using the MongoDB utility class
+            # to ensure consistency across the application
+            for logical_name, actual_name in MongoDB.COLLECTIONS.items():
+                self.stdout.write(f"Creating {logical_name} collection...")
+                # Use the setup_collection method with verbose output
+                mongo_instance.setup_collection(actual_name, create=True, verbose=True)
             
             self.stdout.write(
                 self.style.SUCCESS("✅ Collections reset complete. All collections have been recreated with proper schema validation.")
