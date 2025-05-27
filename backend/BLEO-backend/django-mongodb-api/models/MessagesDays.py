@@ -8,7 +8,7 @@ class MessagesDays:
     """Daily messages schema"""
     def __init__(
         self,
-        BLEOId: int,
+        BLEOId: str,
         date: datetime,
         messages: List[Dict[str, Any]] = None,
         mood: str = None,

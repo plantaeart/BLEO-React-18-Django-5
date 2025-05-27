@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from models.response.BLEOResponse import BLEOResponse
 from models.enums.MoodType import MoodType
 from models.enums.EnergyPleasantnessType import EnergyLevel, Pleasantness, MoodQuadrant
+from api.serializers import MessagesDayserializer
 
 def _generate_message_ids(messages):
     """Generate IDs for messages that don't have them"""
@@ -29,6 +30,18 @@ def _generate_message_ids(messages):
         processed_messages.append(msg)
     
     return processed_messages
+
+def _add_quadrant_info(self, message_day):
+    """Helper method to add quadrant information to a message day"""
+    if 'energy_level' in message_day and message_day['energy_level'] and \
+        'pleasantness' in message_day and message_day['pleasantness']:
+        try:
+            energy = EnergyLevel(message_day['energy_level'])
+            pleasant = Pleasantness(message_day['pleasantness'])
+            quadrant = MoodQuadrant.from_dimensions(energy, pleasant)
+            message_day['quadrant'] = quadrant.value
+        except (ValueError, AttributeError):
+            message_day['quadrant'] = None
 
 class MessageDayListCreateView(APIView):
     """API view for listing and creating message days"""
@@ -90,11 +103,17 @@ class MessageDayListCreateView(APIView):
             # Convert ObjectId to string for JSON serialization
             for day in message_days:
                 day['_id'] = str(day['_id'])
-                if 'date' in day:
+                if 'date' in day and isinstance(day['date'], datetime):
                     day['date'] = day['date'].strftime('%d-%m-%Y')
+                
+                # Add quadrant information
+                _add_quadrant_info(self, day)
+            
+            # Use serializer for consistent output
+            serializer = MessagesDayserializer(message_days, many=True)
             
             return BLEOResponse.success(
-                data=message_days,
+                data=serializer.data,
                 message="Message days retrieved successfully"
             ).to_response()
             
@@ -106,21 +125,30 @@ class MessageDayListCreateView(APIView):
     def post(self, request):
         """Create a new message day"""
         try:
-            data = request.data
+            # Check if date is provided in request data if not initialize to today
+            if 'date' not in request.data:
+                now = datetime.now()
+                request.data['date'] = now.strftime('%d-%m-%Y')
             
-            # Validate required fields
-            if 'BLEOId' not in data:
+            # Ensure BLEOId is provided in request data if not get it from URL
+            if 'BLEOId' not in request.data:
+                bleoid = request.query_params.get('bleoid')
+                if not bleoid:
+                    return BLEOResponse.validation_error(
+                        message="BLEOId is required"
+                    ).to_response(status.HTTP_400_BAD_REQUEST)
+                request.data['BLEOId'] = bleoid
+
+            # Validate with serializer
+            serializer = MessagesDayserializer(data=request.data, partial=True)
+            if not serializer.is_valid():
                 return BLEOResponse.validation_error(
-                    message="Missing required field: BLEOId"
+                    message="Invalid data",
+                    errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
-            
-            # Convert BLEOId to integer
-            try:
-                bleoid = data['BLEOId']
-            except (ValueError, TypeError):
-                return BLEOResponse.validation_error(
-                    message="BLEOId must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
+                
+            validated_data = serializer.validated_data
+            bleoid = validated_data['BLEOId']
             
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -149,7 +177,7 @@ class MessageDayListCreateView(APIView):
                 ).to_response(status.HTTP_409_CONFLICT)
             
             # Process messages - generate IDs
-            messages = data.get('messages', [])
+            messages = validated_data.get('messages', [])  # Use validated_data instead
             processed_messages = _generate_message_ids(messages)
             
             # Create MessagesDays instance with midnight date
@@ -157,9 +185,9 @@ class MessageDayListCreateView(APIView):
                 BLEOId=bleoid,
                 date=message_date,
                 messages=processed_messages,
-                mood=data.get('mood'),
-                energy_level=data.get('energy_level'),
-                pleasantness=data.get('pleasantness')
+                mood=validated_data.get('mood'),  # Use validated_data instead
+                energy_level=validated_data.get('energy_level'),  # Use validated_data instead
+                pleasantness=validated_data.get('pleasantness')  # Use validated_data instead
             )
             
             # Save to MongoDB
@@ -173,8 +201,14 @@ class MessageDayListCreateView(APIView):
             if 'date' in created_message_day and isinstance(created_message_day['date'], datetime):
                 created_message_day['date'] = created_message_day['date'].strftime('%d-%m-%Y')
             
+            # Add quadrant info
+            _add_quadrant_info(self, created_message_day)
+            
+            # Use serializer for response
+            response_serializer = MessagesDayserializer(created_message_day)
+            
             return BLEOResponse.success(
-                data=created_message_day,
+                data=response_serializer.data,
                 message="Message day created successfully"
             ).to_response(status.HTTP_201_CREATED)
             
@@ -190,7 +224,6 @@ class MessageDayDetailView(APIView):
     def get_by_bleoid_and_date(self, bleoid, date):
         """Get a message day by BLEOId and date"""
         try:
-            bleoid_int = bleoid
             date_obj = datetime.strptime(date, '%d-%m-%Y')
             
             # Define start and end of the day
@@ -199,20 +232,16 @@ class MessageDayDetailView(APIView):
             
             db = MongoDB.get_instance().get_collection('MessagesDays')
             return db.find_one({
-                "BLEOId": bleoid_int,
+                "BLEOId": bleoid,  
                 "date": {"$gte": start_of_day, "$lte": end_of_day}
             })
-        except (ValueError, TypeError):
+        except ValueError:  # Keep ValueError for date parsing errors
             return None
     
     def get_by_bleoid(self, bleoid):
         """Get message days for a specific BLEOId"""
-        try:
-            bleoid_int = bleoid
-            db = MongoDB.get_instance().get_collection('MessagesDays')
-            return list(db.find({"BLEOId": bleoid_int}))
-        except (ValueError, TypeError):
-            return None
+        db = MongoDB.get_instance().get_collection('MessagesDays')
+        return list(db.find({"BLEOId": bleoid}))
 
     def get_by_date(self, date):
         """Get message days for a specific date"""
@@ -232,7 +261,7 @@ class MessageDayDetailView(APIView):
         """Get message days by BLEOId, date, or both"""
         try:
             if bleoid and date:
-                # Get a single message day by BLEOId and date
+                # Single message day retrieval
                 message_day = self.get_by_bleoid_and_date(bleoid, date)
                 if not message_day:
                     return BLEOResponse.not_found(
@@ -245,13 +274,16 @@ class MessageDayDetailView(APIView):
                     message_day['date'] = message_day['date'].strftime('%d-%m-%Y')
                     
                 # Add quadrant info
-                self._add_quadrant_info(message_day)
+                _add_quadrant_info(self, message_day)
+                
+                # Use serializer for output
+                serializer = MessagesDayserializer(message_day)
                 
                 return BLEOResponse.success(
-                    data=message_day,
+                    data=serializer.data,
                     message="Message day retrieved successfully"
                 ).to_response()
-                
+        
             elif bleoid:
                 # Get all message days for this BLEOId
                 message_days = self.get_by_bleoid(bleoid)
@@ -279,10 +311,13 @@ class MessageDayDetailView(APIView):
                 if isinstance(day['date'], datetime):
                     day['date'] = day['date'].strftime('%d-%m-%Y')
                 # Add quadrant info
-                self._add_quadrant_info(day)
+                _add_quadrant_info(self, day)
+            
+            # Use serializer for output
+            serializer = MessagesDayserializer(message_days, many=True)
             
             return BLEOResponse.success(
-                data=message_days,
+                data=serializer.data,
                 message="Message days retrieved successfully"
             ).to_response()
             
@@ -290,40 +325,38 @@ class MessageDayDetailView(APIView):
             return BLEOResponse.server_error(
                 message=f"Failed to retrieve message day(s): {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def _add_quadrant_info(self, message_day):
-        """Helper method to add quadrant information to a message day"""
-        if 'energy_level' in message_day and message_day['energy_level'] and \
-           'pleasantness' in message_day and message_day['pleasantness']:
-            try:
-                energy = EnergyLevel(message_day['energy_level'])
-                pleasant = Pleasantness(message_day['pleasantness'])
-                quadrant = MoodQuadrant.from_dimensions(energy, pleasant)
-                message_day['quadrant'] = quadrant.value
-            except (ValueError, AttributeError):
-                message_day['quadrant'] = None
     
     def put(self, request, bleoid, date):
         """Update a message day by BLEOId and date"""
         try:
-            data = request.data
+            # Get existing message day
             message_day = self.get_by_bleoid_and_date(bleoid, date)
             if not message_day:
                 return BLEOResponse.not_found(
                     message=f"No message day found for BLEOId={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            # Don't allow changing BLEOId or date
-            if 'BLEOId' in data:
-                del data['BLEOId']
-            if 'date' in data:
-                del data['date']
+            # Use serializer for input validation
+            serializer = MessagesDayserializer(data=request.data, partial=True)
+            if not serializer.is_valid():
+                return BLEOResponse.validation_error(
+                    message="Invalid data",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
             
+            validated_data = serializer.validated_data
+            
+            # Don't allow changing BLEOId or date
+            if 'BLEOId' in validated_data:
+                del validated_data['BLEOId']
+            if 'date' in validated_data:
+                del validated_data['date']
+        
             # Update the document
-            db = MongoDB.get_instance().get_collection('MessagesDays')
+            db = MongoDB.get_instance().get_collection('MessagesDays')  # Fixed collection name
             result = db.update_one(
                 {"_id": message_day['_id']},
-                {"$set": data}
+                {"$set": validated_data}
             )
             
             if result.modified_count == 0:
@@ -337,15 +370,20 @@ class MessageDayDetailView(APIView):
             # Convert ObjectId to string
             updated_message_day['_id'] = str(updated_message_day['_id'])
             
-            # Format date as ISO
+            # Format date
             if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
                 updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
-            
+        
+            # Add quadrant info
+            _add_quadrant_info(self, updated_message_day)
+        
+            # Use serializer for response
+            response_serializer = MessagesDayserializer(updated_message_day)
             return BLEOResponse.success(
-                data=updated_message_day,
+                data=response_serializer.data,
                 message="Message day updated successfully"
             ).to_response()
-            
+        
         except Exception as e:
             return BLEOResponse.server_error(
                 message=f"Failed to update message day: {str(e)}"
@@ -372,7 +410,7 @@ class MessageDayDetailView(APIView):
             return BLEOResponse.server_error(
                 message=f"Failed to delete message day: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+    
 
 class MoodOptionsView(APIView):
     """API view for getting mood-related options"""
@@ -439,10 +477,25 @@ class MessageDayCreateView(APIView):
     def post(self, request, bleoid):
         """Create a new message day with BLEOId from URL path"""
         try:
-            data = request.data.copy()  # Make a copy to avoid modifying original
 
-            # Add BLEOId from URL path to data
+            data = request.data.copy()
+
+            # Add BLEOId from URL to data
             data['BLEOId'] = bleoid
+            
+            # Check if date is provided, if not initialize to today
+            if 'date' not in data:
+                now = datetime.now()
+                data['date'] = now.strftime('%d-%m-%Y')
+
+            serializer = MessagesDayserializer(data=data)
+            if not serializer.is_valid():
+                return BLEOResponse.validation_error(
+                    message="Invalid data",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+            
+            validated_data = serializer.validated_data
             
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -495,12 +548,66 @@ class MessageDayCreateView(APIView):
             if 'date' in created_message_day and isinstance(created_message_day['date'], datetime):
                 created_message_day['date'] = created_message_day['date'].strftime('%d-%m-%Y')
             
+            # Add quadrant info
+            _add_quadrant_info(self, created_message_day)
+            
+            # Use serializer for response
+            response_serializer = MessagesDayserializer(created_message_day)
+            
             return BLEOResponse.success(
-                data=created_message_day,
+                data=response_serializer.data,
                 message="Message day created successfully"
             ).to_response(status.HTTP_201_CREATED)
             
         except Exception as e:
             return BLEOResponse.server_error(
                 message=f"Failed to create message day: {str(e)}"
+            ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _format_message_day_for_serializer(self, message_day):
+        """Format a message day document for serializer consumption"""
+        if not message_day:
+            return None
+            
+        # Convert ObjectId to string
+        message_day['_id'] = str(message_day['_id'])
+        
+        # Format date
+        if 'date' in message_day and isinstance(message_day['date'], datetime):
+            message_day['date'] = message_day['date'].strftime('%d-%m-%Y')
+        
+        # Add quadrant info
+        _add_quadrant_info(self, message_day)
+        
+        return message_day
+
+    def delete(self, request, bleoid):
+        """Delete all message days for a specific BLEOId"""
+        try:
+            # Check if user exists
+            db_users = MongoDB.get_instance().get_collection('Users')
+            user = db_users.find_one({"BLEOId": bleoid})
+            
+            if not user:
+                return BLEOResponse.not_found(
+                    message=f"User with BLEOId {bleoid} not found"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Delete all message days for this user
+            db = MongoDB.get_instance().get_collection('MessagesDays')
+            result = db.delete_many({"BLEOId": bleoid})
+            
+            if result.deleted_count == 0:
+                return BLEOResponse.not_found(
+                    message=f"No message days found for BLEOId={bleoid}"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            return BLEOResponse.success(
+                data={"deleted_count": result.deleted_count},
+                message=f"Successfully deleted {result.deleted_count} message day(s) for BLEOId={bleoid}"
+            ).to_response(status.HTTP_200_OK)
+            
+        except Exception as e:
+            return BLEOResponse.server_error(
+                message=f"Failed to delete message days: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)

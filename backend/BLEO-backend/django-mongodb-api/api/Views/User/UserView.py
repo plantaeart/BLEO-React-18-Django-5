@@ -5,6 +5,7 @@ from utils.mongodb_utils import MongoDB
 from django.contrib.auth.hashers import make_password, check_password
 from bson import ObjectId
 from models.response.BLEOResponse import BLEOResponse
+from api.serializers import UserSerializer  # Import the serializer
 
 class UserListCreateView(APIView):
     """API view for listing and creating users"""
@@ -18,9 +19,12 @@ class UserListCreateView(APIView):
             # Convert ObjectId to string for JSON serialization
             for user in users:
                 user['_id'] = str(user['_id'])
+            
+            # Serialize the users
+            serializer = UserSerializer(users, many=True)
                 
             return BLEOResponse.success(
-                data=users,
+                data=serializer.data,
                 message="Users retrieved successfully"
             ).to_response()
         except Exception as e:
@@ -31,19 +35,31 @@ class UserListCreateView(APIView):
     def post(self, request):
         """Create a new user"""
         try:
-            data = request.data
+            # First check if we received any data
+            if not request.data:
+                return BLEOResponse.validation_error(
+                    message="No data provided. Request body is empty.",
+                    errors={"request": "Empty request body"}
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+        
+            # Use the serializer for validation
+            serializer = UserSerializer(data=request.data)
+            if not serializer.is_valid():
+                # Get field names with errors
+                error_fields = ", ".join(serializer.errors.keys())
+                
+                # More descriptive error message
+                return BLEOResponse.validation_error(
+                    message=f"Validation failed for fields: {error_fields}",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
             
-            # Validate required fields
-            required_fields = ['email', 'password']
-            for field in required_fields:
-                if field not in data:
-                    return BLEOResponse.validation_error(
-                        message=f"Missing required field: {field}"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
+            # Get validated data
+            validated_data = serializer.validated_data
             
             # Check if email already exists
             db_users = MongoDB.get_instance().get_collection('Users')
-            if db_users.find_one({"email": data['email']}):
+            if db_users.find_one({"email": validated_data['email']}):
                 return BLEOResponse.error(
                     error_type="DuplicateError",
                     error_message="Email already exists"
@@ -56,17 +72,19 @@ class UserListCreateView(APIView):
                 if not db_users.find_one({"BLEOId": new_bleoid}):
                     break
         
-            # Hash password if it's not already hashed
-            if not data['password'].startswith('$2'):
-                data['password'] = make_password(data['password'])
+            # Hash password
+            validated_data['password'] = make_password(validated_data['password'])
         
             # Create user
             user = User(
                 BLEOId=new_bleoid,
-                email=data['email'],
-                password=data['password'],
-                userName=data.get('userName', "NewUser"),
-                profilePic=data.get('profilePic')
+                email=validated_data['email'],
+                password=validated_data['password'],
+                userName=validated_data.get('userName', "NewUser"),
+                profilePic=validated_data.get('profilePic'),
+                email_verified=validated_data.get('email_verified', False),
+                bio=validated_data.get('bio'),
+                preferences=validated_data.get('preferences', {})
             )
             
             # Save to MongoDB
@@ -77,8 +95,11 @@ class UserListCreateView(APIView):
             del created_user['password']  # Remove password from response
             created_user['_id'] = str(result.inserted_id)
             
+            # Serialize the response
+            response_serializer = UserSerializer(created_user)
+            
             return BLEOResponse.success(
-                data=created_user,
+                data=response_serializer.data,
                 message="User created successfully"
             ).to_response(status.HTTP_201_CREATED)
             
@@ -95,9 +116,11 @@ class UserDetailView(APIView):
         """Get a single user by BLEOId or MongoDB ObjectId"""
         db = MongoDB.get_instance().get_collection('Users')
         
-        # If not found or not convertible to int, try as MongoDB ObjectId
-        if ObjectId.is_valid(bleoid):
-            from bson import ObjectId
+        # First try BLEOId (now a string)
+        user = db.find_one({"BLEOId": bleoid}, {'password': 0})
+        
+        # If not found and it's a valid ObjectId, try that
+        if not user and ObjectId.is_valid(bleoid):
             user = db.find_one({"_id": ObjectId(bleoid)}, {'password': 0})
             
         return user
@@ -115,8 +138,11 @@ class UserDetailView(APIView):
             # Convert ObjectId to string
             user['_id'] = str(user['_id'])
             
+            # Serialize the user
+            serializer = UserSerializer(user)
+            
             return BLEOResponse.success(
-                data=user,
+                data=serializer.data,
                 message="User retrieved successfully"
             ).to_response()
             
@@ -128,28 +154,36 @@ class UserDetailView(APIView):
     def put(self, request, bleoid):
         """Update a user by BLEOId"""
         try:
-            data = request.data
-            db = MongoDB.get_instance().get_collection('Users')
-            
             # Check if user exists
             user = self.get_object(bleoid)
             if user is None:
                 return BLEOResponse.not_found(
                     message="User not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
-                
+            
+            # Use serializer for validation
+            serializer = UserSerializer(data=request.data, partial=True)
+            if not serializer.is_valid():
+                return BLEOResponse.validation_error(
+                    message="Invalid data",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+            
+            validated_data = serializer.validated_data
+            
             # Hash password if it was provided
-            if 'password' in data:
-                data['password'] = make_password(data['password'])
+            if 'password' in validated_data:
+                validated_data['password'] = make_password(validated_data['password'])
         
             # Don't allow changing BLEOId
-            if 'BLEOId' in data:
-                del data['BLEOId']
+            if 'BLEOId' in validated_data:
+                del validated_data['BLEOId']
         
             # Update user
+            db = MongoDB.get_instance().get_collection('Users')
             result = db.update_one(
                 {"BLEOId": bleoid}, 
-                {'$set': data}
+                {'$set': validated_data}
             )
             
             if result.modified_count == 0:
@@ -161,8 +195,11 @@ class UserDetailView(APIView):
             updated_user = self.get_object(bleoid)
             updated_user['_id'] = str(updated_user['_id'])
         
+            # Serialize the response
+            response_serializer = UserSerializer(updated_user)
+            
             return BLEOResponse.success(
-                data=updated_user,
+                data=response_serializer.data,
                 message="User updated successfully"
             ).to_response()
         

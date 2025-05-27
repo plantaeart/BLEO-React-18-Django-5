@@ -58,10 +58,10 @@ class Command(BaseCommand):
             db.Links.create_index([("BLEOIdPartner1", ASCENDING)], unique=True)
             
             # Message days collection
-            self.stdout.write("Creating MessageDays collection...")
-            db.create_collection("MessageDays", validator=MESSAGE_DAY_SCHEMA)
+            self.stdout.write("Creating MessagesDays collection...")
+            db.create_collection("MessagesDays", validator=MESSAGE_DAY_SCHEMA)
             # Create compound index for BLEOId and date
-            db.MessageDays.create_index(
+            db.MessagesDays.create_index(
                 [("BLEOId", ASCENDING), ("date", ASCENDING)], 
                 unique=True
             )

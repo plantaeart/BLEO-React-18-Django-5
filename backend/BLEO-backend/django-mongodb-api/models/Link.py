@@ -12,8 +12,8 @@ class Link:
     """Connection between users"""
     def __init__(
         self,
-        BLEOIdPartner1: int,
-        BLEOIdPartner2: Optional[int] = None,
+        BLEOIdPartner1: str,
+        BLEOIdPartner2: Optional[str] = None,
         status: str = ConnectionStatus.PENDING.value,
         created_at: datetime = None,
         updated_at: datetime = None,

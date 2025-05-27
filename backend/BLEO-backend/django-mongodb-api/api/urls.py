@@ -15,28 +15,28 @@ from auth.token_validation import TokenValidationView
 urlpatterns = [
     # User CRUD endpoints
     path('users/', UserListCreateView.as_view(), name='user-list-create'),
-    path('users/<str:bleoid>/', UserDetailView.as_view(), name='user-detail'),  # Changed from int to str
+    path('users/<str:bleoid>/', UserDetailView.as_view(), name='user-detail'),  
 
     # Link CRUD endpoints
     path('links/', LinkListCreateView.as_view(), name='link-list-create'),
-    path('links/<str:bleoidPartner1>/', LinkDetailView.as_view(), name='link-detail'),  # Changed from int to str
+    path('links/<str:bleoidPartner1>/', LinkDetailView.as_view(), name='link-detail'),  
     
     # MessagesDays CRUD endpoints - COLLECTION LEVEL
     path('messagesdays/', MessageDayListCreateView.as_view(), name='message-day-list'),
-    path('messagesdays/<str:bleoid>/', MessageDayCreateView.as_view(), name='message-day-create-with-id'),  # Changed from int to str
+    path('messagesdays/<str:bleoid>/', MessageDayCreateView.as_view(), name='message-day-create-with-id'),  
     # MessagesDays CRUD endpoints - INDIVIDUAL RESOURCE LEVEL
-    path('messagesdays/<str:bleoid>/<str:date>/', MessageDayDetailView.as_view(), name='message-day-detail'),  # Changed from int to str
+    path('messagesdays/<str:bleoid>/<str:date>/', MessageDayDetailView.as_view(), name='message-day-detail'),  
     
     # Mood options endpoint
     path('mood-options/', MoodOptionsView.as_view(), name='mood-options'),
 
     # Message operations
     # Message operations - GET all messages for user
-    path('messagesdays/<str:bleoid>/messages/', MessageOperationsView.as_view(), name='user-messages'),  # Changed from int to str
+    path('messagesdays/<str:bleoid>/messages/', MessageOperationsView.as_view(), name='user-messages'),  
     # Message operations - GET/POST/PUT/DELETE messages for a specific date
-    path('messagesdays/<str:bleoid>/<str:date>/messages/', MessageOperationsView.as_view(), name='message-operations'),  # Changed from int to str
+    path('messagesdays/<str:bleoid>/<str:date>/messages/', MessageOperationsView.as_view(), name='message-operations'),  
     # Message operations - GET/PUT/DELETE a specific message
-    path('messagesdays/<str:bleoid>/<str:date>/messages/<int:message_id>/', MessageOperationsView.as_view(), name='message-detail'),  # Changed bleoid from int to str
+    path('messagesdays/<str:bleoid>/<str:date>/messages/<int:message_id>/', MessageOperationsView.as_view(), name='message-detail'), 
     ]
 
 urlpatterns += [

@@ -1,16 +1,11 @@
-# Create Views/Connection/ConnectionView.py
 from rest_framework.views import APIView
 from rest_framework import status
 from models.response.BLEOResponse import BLEOResponse
 from utils.mongodb_utils import MongoDB
 from bson import ObjectId
 from datetime import datetime
-
-class ConnectionStatus:
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    BLOCKED = "blocked"
+from api.serializers import ConnectionRequestSerializer, ConnectionSerializer, ConnectionResponseSerializer, UserSerializer, ConnectionFilterSerializer
+from models.enums.ConnectionStatus import ConnectionStatus
 
 class ConnectionRequestView(APIView):
     """API view for sending connection requests"""
@@ -18,18 +13,17 @@ class ConnectionRequestView(APIView):
     def post(self, request):
         """Send a connection request"""
         try:
-            data = request.data
+            # Validate request data using serializer
+            serializer = ConnectionRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return BLEOResponse.validation_error(
+                    message="Invalid data",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
             
-            # Validate required fields
-            required_fields = ['from_bleoid', 'to_bleoid']
-            for field in required_fields:
-                if field not in data:
-                    return BLEOResponse.validation_error(
-                        message=f"Missing required field: {field}"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
-            
-            from_bleoid = data['from_bleoid']  # No need to cast to int
-            to_bleoid = data['to_bleoid']  # No need to cast to int
+            validated_data = serializer.validated_data
+            from_bleoid = validated_data['from_bleoid']
+            to_bleoid = validated_data['to_bleoid']
             
             # Check users exist
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -46,7 +40,7 @@ class ConnectionRequestView(APIView):
             # Check if sender already has an active connection or pending request
             existing_from = db_links.find_one({
                 "BLEOIdPartner1": from_bleoid,
-                "BLEOIdPartner2": {"$ne": None},  # Only care about connections to actual users
+                "BLEOIdPartner2": {"$ne": None},
                 "status": {"$in": [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED]}
             })
             
@@ -97,9 +91,12 @@ class ConnectionRequestView(APIView):
                 
                 updated = db_links.find_one({"_id": existing_rejected["_id"]})
                 updated["_id"] = str(updated["_id"])
-                
+
+                # Use the serializer for consistent output
+                response_serializer = ConnectionSerializer(updated)
+
                 return BLEOResponse.success(
-                    data=updated,
+                    data=response_serializer.data,
                     message="Connection request renewed"
                 ).to_response(status.HTTP_200_OK)
             
@@ -118,8 +115,11 @@ class ConnectionRequestView(APIView):
             created_link = link
             created_link["_id"] = str(result.inserted_id)
             
+            # Serialize response
+            response_serializer = ConnectionSerializer(created_link)
+            
             return BLEOResponse.success(
-                data=created_link,
+                data=response_serializer.data,
                 message="Connection request sent"
             ).to_response(status.HTTP_201_CREATED)
             
@@ -134,12 +134,15 @@ class ConnectionResponseView(APIView):
     def put(self, request, connection_id):
         """Accept/Reject connection request"""
         try:
-            action = request.data.get('action')
-            
-            if action not in ['accept', 'reject', 'block']:
+            # Validate action using serializer
+            serializer = ConnectionResponseSerializer(data=request.data)
+            if not serializer.is_valid():
                 return BLEOResponse.validation_error(
-                    message="Invalid action. Must be 'accept', 'reject', or 'block'"
+                    message="Invalid data",
+                    errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
+                
+            action = serializer.validated_data['action']
             
             # Get connection
             db_links = MongoDB.get_instance().get_collection('Links')
@@ -199,8 +202,11 @@ class ConnectionResponseView(APIView):
             updated_connection = db_links.find_one({"_id": ObjectId(connection_id)})
             updated_connection['_id'] = str(updated_connection['_id'])
             
+            # Serialize response
+            response_serializer = ConnectionSerializer(updated_connection)
+            
             return BLEOResponse.success(
-                data=updated_connection,
+                data=response_serializer.data,
                 message=f"Connection request {action}ed"
             ).to_response()
             
@@ -215,32 +221,36 @@ class ConnectionListView(APIView):
     def get(self, request):
         """Get all connections for a user"""
         try:
-            # Get user ID from query parameters
-            bleoid = request.query_params.get('bleoid')
-            status_filter = request.query_params.get('status')
-            
-            if not bleoid:
+            # Validate query parameters
+            filter_serializer = ConnectionFilterSerializer(data=request.query_params)
+            if not filter_serializer.is_valid():
                 return BLEOResponse.validation_error(
-                    message="BLEOId parameter is required"
+                    message="Invalid filter parameters",
+                    errors=filter_serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
+
+            validated_filters = filter_serializer.validated_data
+            bleoid = validated_filters['bleoid']
+            status_filter = validated_filters.get('status')
+            direction = validated_filters.get('direction', 'both')
             
-            # Build query
-            query = {
-                "$or": [
-                    {"BLEOIdPartner1": bleoid},
-                    {"BLEOIdPartner2": bleoid}
-                ]
-            }
+            # Build query based on direction
+            if direction == 'outgoing':
+                query = {"BLEOIdPartner1": bleoid}
+            elif direction == 'incoming':
+                query = {"BLEOIdPartner2": bleoid}
+            else: # both
+                query = {"$or": [{"BLEOIdPartner1": bleoid}, {"BLEOIdPartner2": bleoid}]}
             
-            # Add status filter if provided
-            if status_filter:
+            # Add status filter if not 'all'
+            if status_filter and status_filter != 'all':
                 query["status"] = status_filter
             
             # Get connections
             db_links = MongoDB.get_instance().get_collection('Links')
             connections = list(db_links.find(query))
             
-            # Convert ObjectId to str for each connection
+            # Enrich connections with user info
             for conn in connections:
                 conn['_id'] = str(conn['_id'])
                 
@@ -249,17 +259,28 @@ class ConnectionListView(APIView):
                 
                 # Get other user's name and profile pic
                 db_users = MongoDB.get_instance().get_collection('Users')
-                other_user = db_users.find_one({"BLEOId": other_id}, {"userName": 1})
+                other_user = db_users.find_one({"BLEOId": other_id}, {"userName": 1, "profilePic": 1, "email": 1})
                 
                 if other_user:
+                    other_user['_id'] = str(other_user.get('_id', ''))
+                    # Get profile picture in proper format
+                    user_serializer = UserSerializer(other_user)
                     conn['other_user'] = {
                         "bleoid": other_id,
-                        "userName": other_user.get('userName', 'Unknown')
+                        "userName": other_user.get('userName', 'Unknown'),
+                        "profilePic": user_serializer.data.get('profilePic')
                     }
+            
+            # Use serializer for response with context
+            serializer = ConnectionSerializer(
+                connections, 
+                many=True,
+                context={'current_user': bleoid}
+            )
             
             return BLEOResponse.success(
                 data={
-                    "connections": connections,
+                    "connections": serializer.data,
                     "count": len(connections)
                 },
                 message="Connections retrieved successfully"

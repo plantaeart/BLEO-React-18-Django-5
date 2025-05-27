@@ -1,7 +1,7 @@
 import os
 from pymongo import MongoClient, ASCENDING
 from environs import Env
-from .mongodb_schemas import USER_SCHEMA, LINK_SCHEMA, MESSAGE_DAY_SCHEMA
+from .mongodb_schemas import USER_SCHEMA, LINK_SCHEMA, MESSAGE_DAY_SCHEMA, PASSWORD_RESET_SCHEMA, TOKEN_BLACKLIST_SCHEMA
 
 env = Env()
 env.read_env()
@@ -58,16 +58,37 @@ class MongoDB:
         if "Users" not in collection_names:
             self._db.create_collection("Users")
         self._db.command("collMod", "Users", validator=USER_SCHEMA)
+        self._db.Users.create_index([("BLEOId", ASCENDING)], unique=True)
+        self._db.Users.create_index([("email", ASCENDING)], unique=True)
         
         # Links collection
         if "Links" not in collection_names:
             self._db.create_collection("Links")
         self._db.command("collMod", "Links", validator=LINK_SCHEMA)
+        self._db.Links.create_index([("BLEOIdPartner1", ASCENDING)], unique=True)
         
         # Message days collection
         if "MessagesDays" not in collection_names:
             self._db.create_collection("MessagesDays")
         self._db.command("collMod", "MessagesDays", validator=MESSAGE_DAY_SCHEMA)
+        self._db.MessagesDays.create_index(
+            [("BLEOId", ASCENDING), ("date", ASCENDING)], 
+            unique=True
+        )
+        
+        # Password reset collection - add this
+        if "PasswordResets" not in collection_names:
+            self._db.create_collection("PasswordResets")
+        self._db.command("collMod", "PasswordResets", validator=PASSWORD_RESET_SCHEMA)
+        self._db.PasswordResets.create_index([("token", ASCENDING)], unique=True)
+        self._db.PasswordResets.create_index([("expires", ASCENDING)], expireAfterSeconds=0)
+        
+        # Token blacklist collection - add this
+        if "TokenBlacklist" not in collection_names:
+            self._db.create_collection("TokenBlacklist")
+        self._db.command("collMod", "TokenBlacklist", validator=TOKEN_BLACKLIST_SCHEMA)
+        self._db.TokenBlacklist.create_index([("token", ASCENDING)], unique=True)
+        self._db.TokenBlacklist.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
     
     def get_db(self):
         return self._db

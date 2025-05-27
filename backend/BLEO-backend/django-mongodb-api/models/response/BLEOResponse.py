@@ -76,9 +76,17 @@ class BLEOResponse(Generic[T]):
         return cls.error("NotFoundError", message)
     
     @classmethod
-    def validation_error(cls, message: str) -> 'BLEOResponse[None]':
+    def validation_error(cls, message: str, errors=None) -> 'BLEOResponse[None]':
         """Create a validation error response."""
-        return cls.error("ValidationError", message)
+        response = cls()
+        response.error_type = "ValidationError"
+        response.error_message = message
+        
+        # Add validation errors if provided
+        if errors:
+            response.data = {"validation_errors": errors}
+            
+        return response
     
     @classmethod
     def server_error(cls, message: str = "Internal server error") -> 'BLEOResponse[None]':

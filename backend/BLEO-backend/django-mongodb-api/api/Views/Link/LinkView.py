@@ -5,6 +5,7 @@ from utils.mongodb_utils import MongoDB
 from bson import ObjectId
 from datetime import datetime
 from models.response.BLEOResponse import BLEOResponse
+from api.serializers import LinkSerializer  # Import the serializer
 
 class LinkListCreateView(APIView):
     """API view for listing and creating links"""
@@ -18,14 +19,15 @@ class LinkListCreateView(APIView):
             # Convert ObjectId to string for JSON serialization
             for link in links:
                 link['_id'] = str(link['_id'])
-                if 'created_at' in link:
-                    # Format as DD:MM:YYYY
-                    link['created_at'] = link['created_at'].strftime('%d:%m:%Y')
+            
+            # Serialize the links
+            serializer = LinkSerializer(links, many=True)
                 
             return BLEOResponse.success(
-                data=links,
+                data=serializer.data,
                 message="Links retrieved successfully"
             ).to_response()
+            
         except Exception as e:
             return BLEOResponse.server_error(
                 message=f"Failed to retrieve links: {str(e)}"
@@ -34,23 +36,19 @@ class LinkListCreateView(APIView):
     def post(self, request):
         """Create a new link with BLEOIdPartner1 required, BLEOIdPartner2 optional"""
         try:
-            data = request.data
-            
-            # Validate BLEOIdPartner1 is provided (required)
-            if 'BLEOIdPartner1' not in data:
+            # Use serializer for validation
+            serializer = LinkSerializer(data=request.data)
+            if not serializer.is_valid():
                 return BLEOResponse.validation_error(
-                    message="Missing required field: BLEOIdPartner1"
+                    message="Invalid data",
+                    errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
+                
+            validated_data = serializer.validated_data
+            bleoidPartner1 = validated_data['BLEOIdPartner1']
+            bleoidPartner2 = validated_data.get('BLEOIdPartner2')
             
-            # Convert BLEOIdPartner1 to integer
-            try:
-                bleoidPartner1 = int(data['BLEOIdPartner1'])
-            except (ValueError, TypeError):
-                return BLEOResponse.validation_error(
-                    message="BLEOIdPartner1 must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
-            # Check if BLEOIdPartner1 user exists
+            # Check if users exist
             db_users = MongoDB.get_instance().get_collection('Users')
             user1 = db_users.find_one({"BLEOId": bleoidPartner1})
             
@@ -59,28 +57,12 @@ class LinkListCreateView(APIView):
                     message=f"User with BLEOId {bleoidPartner1} not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            # Process BLEOIdPartner2 if provided
-            bleoidPartner2 = None
-            if 'BLEOIdPartner2' in data and data['BLEOIdPartner2'] is not None:
-                try:
-                    bleoidPartner2 = int(data['BLEOIdPartner2'])
-                    
-                    # Check if BLEOIds are the same
-                    if bleoidPartner1 == bleoidPartner2:
-                        return BLEOResponse.validation_error(
-                            message="Cannot link a user to themselves"
-                        ).to_response(status.HTTP_400_BAD_REQUEST)
-                    
-                    # Check if BLEOIdPartner2 user exists
-                    user2 = db_users.find_one({"BLEOId": bleoidPartner2})
-                    if not user2:
-                        return BLEOResponse.not_found(
-                            message=f"User with BLEOId {bleoidPartner2} not found"
-                        ).to_response(status.HTTP_404_NOT_FOUND)
-                except (ValueError, TypeError):
-                    return BLEOResponse.validation_error(
-                        message="BLEOIdPartner2 must be a number"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
+            if bleoidPartner2:
+                user2 = db_users.find_one({"BLEOId": bleoidPartner2})
+                if not user2:
+                    return BLEOResponse.not_found(
+                        message=f"User with BLEOId {bleoidPartner2} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Check if link already exists with this BLEOIdPartner1
             db_links = MongoDB.get_instance().get_collection('Links')
@@ -92,23 +74,13 @@ class LinkListCreateView(APIView):
                     error_message=f"Link with BLEOIdPartner1={bleoidPartner1} already exists"
                 ).to_response(status.HTTP_409_CONFLICT)
             
-            # If created_at is provided as a string
-            if 'created_at' in data and isinstance(data['created_at'], str):
-                try:
-                    # Parse DD:MM:YYYY format
-                    created_at = datetime.strptime(data['created_at'], '%d-%m-%Y')
-                except ValueError:
-                    return BLEOResponse.validation_error(
-                        message="Invalid date format, use DD-MM-YYYY"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
-            else:
-                created_at = datetime.now()
-            
-            # Create link with parsed datetime
+            # Create link
             link = Link(
                 BLEOIdPartner1=bleoidPartner1,
-                BLEOIdPartner2=bleoidPartner2,  # Can be None
-                created_at=created_at
+                BLEOIdPartner2=bleoidPartner2,
+                status=validated_data.get('status', "pending"),
+                created_at=validated_data.get('created_at'),
+                updated_at=validated_data.get('updated_at')
             )
             
             # Save to MongoDB
@@ -118,8 +90,11 @@ class LinkListCreateView(APIView):
             created_link = link.to_dict()
             created_link['_id'] = str(result.inserted_id)
             
+            # Serialize response
+            response_serializer = LinkSerializer(created_link)
+            
             return BLEOResponse.success(
-                data=created_link,
+                data=response_serializer.data,
                 message="Link created successfully"
             ).to_response(status.HTTP_201_CREATED)
             
@@ -134,40 +109,28 @@ class LinkDetailView(APIView):
     
     def get_object(self, bleoidPartner1):
         """Get a single link by BLEOIdPartner1"""
-        try:
-            bleoidPartner1 = int(bleoidPartner1)
-            db = MongoDB.get_instance().get_collection('Links')
-            return db.find_one({"BLEOIdPartner1": bleoidPartner1})
-        except (ValueError, TypeError):
-            return None
+        db = MongoDB.get_instance().get_collection('Links')
+        return db.find_one({"BLEOIdPartner1": bleoidPartner1})
     
     def get(self, request, bleoidPartner1):
         """Get a link by BLEOIdPartner1"""
         try:
-            # Convert to integer for lookup
-            try:
-                bleoidPartner1Value = int(bleoidPartner1)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="Invalid BLEOIdPartner1 format, must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
-            # Get link by BLEOIdPartner1
-            link = self.get_object(bleoidPartner1Value)
+            # Get link by BLEOIdPartner1 (now a string)
+            link = self.get_object(bleoidPartner1)
             
             if link is None:
                 return BLEOResponse.not_found(
-                    message=f"No link found for BLEOIdPartner1={bleoidPartner1Value}"
+                    message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
                 
             # Convert ObjectId to string for JSON serialization
             link['_id'] = str(link['_id'])
-            if 'created_at' in link:
-                # Format as DD:MM:YYYY
-                link['created_at'] = link['created_at'].strftime('%d:%m:%Y')
             
+            # Serialize the link
+            serializer = LinkSerializer(link)
+                
             return BLEOResponse.success(
-                data=link,
+                data=serializer.data,
                 message="Link retrieved successfully"
             ).to_response()
                 
@@ -177,66 +140,63 @@ class LinkDetailView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)           
     
     def put(self, request, bleoidPartner1):
-        """Update BLEOIdPartner2 for a link and automatically update the reciprocal link"""
+        """Update a link"""
         try:
-            # Convert to integer for lookup
-            try:
-                bleoidPartner1Value = int(bleoidPartner1)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="Invalid BLEOIdPartner1 format, must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-            
             # Get the link
-            db = MongoDB.get_instance().get_collection('Links')
-            link = self.get_object(bleoidPartner1Value)
+            link = self.get_object(bleoidPartner1)
             
             if link is None:
                 return BLEOResponse.not_found(
-                    message=f"No link found for BLEOIdPartner1={bleoidPartner1Value}"
+                    message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
-            # Get current BLEOIdPartner2 value (to handle unlinking case)
+            # Get current BLEOIdPartner2 value
             current_bleoidPartner2 = link.get('BLEOIdPartner2')
             
-            # Process updated BLEOIdPartner2
-            data = request.data
-            new_bleoidPartner2 = None
+            # Validate with serializer
+            serializer = LinkSerializer(data=request.data, partial=True)
+            if not serializer.is_valid():
+                return BLEOResponse.validation_error(
+                    message="Invalid data",
+                    errors=serializer.errors
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+                
+            validated_data = serializer.validated_data
             
-            if 'BLEOIdPartner2' in data and data['BLEOIdPartner2'] is not None:
-                try:
-                    new_bleoidPartner2 = int(data['BLEOIdPartner2'])
+            # Don't allow changing BLEOIdPartner1
+            if 'BLEOIdPartner1' in validated_data:
+                del validated_data['BLEOIdPartner1']
+                
+            # Handle new BLEOIdPartner2
+            new_bleoidPartner2 = validated_data.get('BLEOIdPartner2')
+            
+            if new_bleoidPartner2:
+                # Check if user exists
+                db_users = MongoDB.get_instance().get_collection('Users')
+                user2 = db_users.find_one({"BLEOId": new_bleoidPartner2})
+                if not user2:
+                    return BLEOResponse.not_found(
+                        message=f"User with BLEOId {new_bleoidPartner2} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
                     
-                    # Check if BLEOIds are the same
-                    if bleoidPartner1Value == new_bleoidPartner2:
-                        return BLEOResponse.validation_error(
-                            message="Cannot link a user to themselves"
-                        ).to_response(status.HTTP_400_BAD_REQUEST)
-                    
-                    # Check if BLEOIdPartner2 user exists
-                    db_users = MongoDB.get_instance().get_collection('Users')
-                    user2 = db_users.find_one({"BLEOId": new_bleoidPartner2})
-                    if not user2:
-                        return BLEOResponse.not_found(
-                            message=f"User with BLEOId {new_bleoidPartner2} not found"
-                        ).to_response(status.HTTP_404_NOT_FOUND)
-                        
-                    # Check if the target user has a link
-                    partner2_link = db.find_one({"BLEOIdPartner1": new_bleoidPartner2})
-                    if not partner2_link:
-                        return BLEOResponse.not_found(
-                            message=f"User with BLEOId {new_bleoidPartner2} does not have a link"
-                        ).to_response(status.HTTP_404_NOT_FOUND)
-                        
-                except (ValueError, TypeError):
-                    return BLEOResponse.validation_error(
-                        message="BLEOIdPartner2 must be a number"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
-        
-            # STEP 1: Update the current link's BLEOIdPartner2
+                # Check if the target user has a link
+                db = MongoDB.get_instance().get_collection('Links')
+                partner2_link = db.find_one({"BLEOIdPartner1": new_bleoidPartner2})
+                if not partner2_link:
+                    return BLEOResponse.not_found(
+                        message=f"User with BLEOId {new_bleoidPartner2} does not have a link"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Update the link
+            db = MongoDB.get_instance().get_collection('Links')
+            
+            # Always update the updated_at timestamp
+            validated_data['updated_at'] = datetime.now()
+            
+            # STEP 1: Update the current link
             result1 = db.update_one(
-                {"BLEOIdPartner1": bleoidPartner1Value},
-                {"$set": {"BLEOIdPartner2": new_bleoidPartner2}}  # Can be None to unlink
+                {"BLEOIdPartner1": bleoidPartner1},
+                {"$set": validated_data}
             )
             
             # STEP 2: If we're linking to a new partner, update their link too
@@ -244,7 +204,7 @@ class LinkDetailView(APIView):
                 # Update the other user's link to point back
                 result2 = db.update_one(
                     {"BLEOIdPartner1": new_bleoidPartner2},
-                    {"$set": {"BLEOIdPartner2": bleoidPartner1Value}}
+                    {"$set": {"BLEOIdPartner2": bleoidPartner1, "updated_at": datetime.now()}}
                 )
                 if result2.modified_count == 0:
                     print(f"Warning: Could not update reciprocal link for BLEOIdPartner1={new_bleoidPartner2}")
@@ -255,7 +215,7 @@ class LinkDetailView(APIView):
                 # We need to remove the link from the previous partner back to us
                 result3 = db.update_one(
                     {"BLEOIdPartner1": current_bleoidPartner2},
-                    {"$set": {"BLEOIdPartner2": None}}
+                    {"$set": {"BLEOIdPartner2": None, "updated_at": datetime.now()}}
                 )
                 if result3.modified_count == 0:
                     print(f"Warning: Could not update previous partner's link for BLEOIdPartner1={current_bleoidPartner2}")
@@ -266,13 +226,14 @@ class LinkDetailView(APIView):
                 ).to_response(status.HTTP_200_OK)
             
             # Get and return updated link
-            updated_link = self.get_object(bleoidPartner1Value)
+            updated_link = self.get_object(bleoidPartner1)
             updated_link['_id'] = str(updated_link['_id'])
-            if 'created_at' in updated_link:
-                updated_link['created_at'] = updated_link['created_at'].strftime('%d:%m:%Y')
+            
+            # Serialize the response
+            response_serializer = LinkSerializer(updated_link)
             
             return BLEOResponse.success(
-                data=updated_link,
+                data=response_serializer.data,
                 message="Link updated successfully"
             ).to_response()
             
@@ -284,22 +245,27 @@ class LinkDetailView(APIView):
     def delete(self, request, bleoidPartner1):
         """Delete a link by BLEOIdPartner1"""
         try:
-            # Convert to integer for lookup
-            try:
-                bleoidPartner1Value = int(bleoidPartner1)
-            except ValueError:
-                return BLEOResponse.validation_error(
-                    message="Invalid BLEOIdPartner1 format, must be a number"
-                ).to_response(status.HTTP_400_BAD_REQUEST)
-                
+            # Check if link exists
+            link = self.get_object(bleoidPartner1)
+            
+            if link is None:
+                return BLEOResponse.not_found(
+                    message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Get current BLEOIdPartner2 value (to handle unlinking case)
+            bleoidPartner2 = link.get('BLEOIdPartner2')
+            
             # Delete by BLEOIdPartner1
             db = MongoDB.get_instance().get_collection('Links')
-            result = db.delete_one({"BLEOIdPartner1": bleoidPartner1Value})
+            result = db.delete_one({"BLEOIdPartner1": bleoidPartner1})
             
-            if result.deleted_count == 0:
-                return BLEOResponse.not_found(
-                    message=f"No link found for BLEOIdPartner1={bleoidPartner1Value}"
-                ).to_response(status.HTTP_404_NOT_FOUND)
+            # If this link had a partner, update their link too
+            if bleoidPartner2:
+                db.update_one(
+                    {"BLEOIdPartner1": bleoidPartner2},
+                    {"$set": {"BLEOIdPartner2": None, "updated_at": datetime.now()}}
+                )
                 
             return BLEOResponse.success(
                 message="Link deleted successfully"

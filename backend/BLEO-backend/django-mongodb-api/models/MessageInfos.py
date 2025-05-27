@@ -12,7 +12,7 @@ class MessageInfos:
         type: MessageType,
         created_at: datetime = None,
     ):
-        self.id = id  # ID is now a required integer
+        self.id = id
         self.title = title
         self.text = text
         self.type = type
@@ -30,7 +30,7 @@ class MessageInfos:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MessageInfos':
         return cls(
-            id=data.get("id"),  # This must be provided by MessageDaysView
+            id=data.get("id"),  # This must be provided by MessagesDaysView
             title=data.get("title"),
             text=data.get("text"),
             type=data.get("type"),
