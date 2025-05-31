@@ -13,14 +13,14 @@ class MessageInfosModelTest(BLEOBaseTest):
             id=1,
             title="Test Title",
             text="Test message content",
-            type="Thoughts"
+            type=MessageType.THOUGHTS.value  # Use enum value
         )
         
         # Check required fields
         self.assertEqual(message.id, 1)
         self.assertEqual(message.title, "Test Title")
         self.assertEqual(message.text, "Test message content")
-        self.assertEqual(message.type, "Thoughts")
+        self.assertEqual(message.type, MessageType.THOUGHTS.value)  # Compare with enum value
         
         # Check default value for created_at
         self.assertIsNotNone(message.created_at)
@@ -36,7 +36,7 @@ class MessageInfosModelTest(BLEOBaseTest):
             id=2,
             title="Complete Title",
             text="Complete message content",
-            type="Journal",
+            type=MessageType.SOUVENIR.value,
             created_at=created_at
         )
         
@@ -44,7 +44,7 @@ class MessageInfosModelTest(BLEOBaseTest):
         self.assertEqual(message.id, 2)
         self.assertEqual(message.title, "Complete Title")
         self.assertEqual(message.text, "Complete message content")
-        self.assertEqual(message.type, "Journal")
+        self.assertEqual(message.type, MessageType.SOUVENIR.value)
         self.assertEqual(message.created_at, created_at)
         
         print(f"  🔹 Message initialized with custom created_at: {message.created_at}")
@@ -58,7 +58,7 @@ class MessageInfosModelTest(BLEOBaseTest):
             id=3,
             title="Timestamp Test",
             text="Testing timestamp",
-            type="Thoughts"
+            type=MessageType.THOUGHTS.value
         )
         
         time.sleep(0.001)
@@ -78,7 +78,7 @@ class MessageInfosModelTest(BLEOBaseTest):
             id=4,
             title="Dict Test",
             text="Testing to_dict",
-            type="Journal",
+            type=MessageType.SOUVENIR.value,
             created_at=created_at
         )
         
@@ -88,7 +88,7 @@ class MessageInfosModelTest(BLEOBaseTest):
         self.assertEqual(message_dict["id"], 4)
         self.assertEqual(message_dict["title"], "Dict Test")
         self.assertEqual(message_dict["text"], "Testing to_dict")
-        self.assertEqual(message_dict["type"], "Journal")
+        self.assertEqual(message_dict["type"], MessageType.SOUVENIR.value)
         self.assertEqual(message_dict["created_at"], created_at)
         
         print("  🔹 to_dict method returns complete dictionary with all fields")
@@ -100,7 +100,7 @@ class MessageInfosModelTest(BLEOBaseTest):
             "id": 5,
             "title": "FromDict Test",
             "text": "Testing from_dict",
-            "type": "Notes",
+            "type": MessageType.NOTES.value,
             "created_at": created_at
         }
         
@@ -110,7 +110,7 @@ class MessageInfosModelTest(BLEOBaseTest):
         self.assertEqual(message.id, 5)
         self.assertEqual(message.title, "FromDict Test")
         self.assertEqual(message.text, "Testing from_dict")
-        self.assertEqual(message.type, "Notes")
+        self.assertEqual(message.type, MessageType.NOTES.value)
         self.assertEqual(message.created_at, created_at)
         
         print("  🔹 from_dict method creates MessageInfos object with correct values")

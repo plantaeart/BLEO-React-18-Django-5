@@ -11,6 +11,8 @@ from auth.password_reset import PasswordResetRequestView, PasswordResetConfirmVi
 from auth.email_verification import EmailVerificationView
 from auth.connection import ConnectionRequestView, ConnectionResponseView, ConnectionListView
 from auth.token_validation import TokenValidationView
+from api.Views.DebugLogs.debug_log_views import LoggingView, AdminLogsView, AdminLogDetailView
+from api.Views.AppParameters.AppParametersView import AppParametersView
 
 urlpatterns = [
     # User CRUD endpoints
@@ -60,4 +62,18 @@ urlpatterns += [
     path('connections/request/', ConnectionRequestView.as_view(), name='connection_request'),
     path('connections/<str:connection_id>/', ConnectionResponseView.as_view(), name='connection_response'),
     path('connections/', ConnectionListView.as_view(), name='connection_list'),
+]
+
+urlpatterns += [
+    # Client-side logging endpoint
+    path('logs/', LoggingView.as_view(), name='logs'),
+    
+    # Admin endpoints
+    path('logs/admin/', AdminLogsView.as_view(), name='admin-logs'),
+    path('logs/admin/<str:log_id>/', AdminLogDetailView.as_view(), name='admin-log-detail'),
+]
+
+urlpatterns += [
+    # App Parameters endpoint
+    path('app-parameters/', AppParametersView.as_view(), name='app-parameters'),
 ]

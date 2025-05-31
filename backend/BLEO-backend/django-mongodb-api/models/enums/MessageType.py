@@ -5,3 +5,4 @@ class MessageType(str, Enum):
     THOUGHTS = "Thoughts"
     LOVE_MESSAGE = "Love_message"
     SOUVENIR = "Souvenir"
+    NOTES = "Notes"

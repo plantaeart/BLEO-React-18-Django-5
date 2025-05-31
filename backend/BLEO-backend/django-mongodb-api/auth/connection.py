@@ -6,6 +6,9 @@ from bson import ObjectId
 from datetime import datetime
 from api.serializers import ConnectionRequestSerializer, ConnectionSerializer, ConnectionResponseSerializer, UserSerializer, ConnectionFilterSerializer
 from models.enums.ConnectionStatus import ConnectionStatus
+from utils.logger import Logger
+from models.enums.LogType import LogType
+from models.enums.ErrorSourceType import ErrorSourceType
 
 class ConnectionRequestView(APIView):
     """API view for sending connection requests"""
@@ -13,9 +16,29 @@ class ConnectionRequestView(APIView):
     def post(self, request):
         """Send a connection request"""
         try:
+            # Get IDs for logging
+            from_bleoid = request.data.get('from_bleoid')
+            to_bleoid = request.data.get('to_bleoid')
+
+            # Log request
+            Logger.debug_user_action(
+                from_bleoid,
+                f"Sending connection request to user {to_bleoid}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Validate request data using serializer
             serializer = ConnectionRequestSerializer(data=request.data)
             if not serializer.is_valid():
+                # Log validation error
+                Logger.debug_error(
+                    f"Invalid connection request data: {serializer.errors}",
+                    400,
+                    from_bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.validation_error(
                     message="Invalid data",
                     errors=serializer.errors
@@ -31,6 +54,14 @@ class ConnectionRequestView(APIView):
             to_user = db_users.find_one({"BLEOId": to_bleoid})
             
             if not from_user or not to_user:
+                # Log user not found error
+                Logger.debug_error(
+                    f"One or both users not found: from={from_bleoid}, to={to_bleoid}",
+                    404,
+                    from_bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message="One or both users not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
@@ -46,11 +77,27 @@ class ConnectionRequestView(APIView):
             
             if existing_from:
                 if existing_from["BLEOIdPartner2"] == to_bleoid:
+                    # Log duplicate connection error
+                    Logger.debug_error(
+                        f"User {from_bleoid} already has a connection request with {to_bleoid}",
+                        400,
+                        from_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.error(
                         error_type="DuplicateError",
                         error_message="You already have a connection request with this user"
                     ).to_response(status.HTTP_400_BAD_REQUEST)
                 else:
+                    # Log connection limit error
+                    Logger.debug_error(
+                        f"User {from_bleoid} already has an active connection with {existing_from['BLEOIdPartner2']}",
+                        400,
+                        from_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.error(
                         error_type="LimitExceeded",
                         error_message="You already have an active connection or pending request with someone else"
@@ -65,6 +112,15 @@ class ConnectionRequestView(APIView):
             })
             
             if existing_to:
+                # Log connection limit error for receiver
+                other_user = existing_to["BLEOIdPartner1"] if existing_to["BLEOIdPartner2"] == to_bleoid else existing_to["BLEOIdPartner2"]
+                Logger.debug_error(
+                    f"User {to_bleoid} already has an active connection with {other_user}",
+                    400,
+                    from_bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.error(
                     error_type="LimitExceeded",
                     error_message="The user you're trying to connect with already has an active connection"
@@ -78,6 +134,14 @@ class ConnectionRequestView(APIView):
             })
             
             if existing_rejected:
+                # Log renewing request
+                Logger.debug_user_action(
+                    from_bleoid,
+                    f"Renewing previously {existing_rejected['status']} connection request with {to_bleoid}",
+                    LogType.INFO.value,
+                    200
+                )
+                
                 # Update existing rejected connection to pending
                 result = db_links.update_one(
                     {"_id": existing_rejected["_id"]},
@@ -95,6 +159,14 @@ class ConnectionRequestView(APIView):
                 # Use the serializer for consistent output
                 response_serializer = ConnectionSerializer(updated)
 
+                # Log success
+                Logger.debug_user_action(
+                    from_bleoid,
+                    f"Connection request to {to_bleoid} renewed successfully",
+                    LogType.SUCCESS.value,
+                    200
+                )
+                
                 return BLEOResponse.success(
                     data=response_serializer.data,
                     message="Connection request renewed"
@@ -118,12 +190,35 @@ class ConnectionRequestView(APIView):
             # Serialize response
             response_serializer = ConnectionSerializer(created_link)
             
+            # Log success
+            Logger.debug_user_action(
+                from_bleoid,
+                f"Connection request to {to_bleoid} sent successfully",
+                LogType.SUCCESS.value,
+                201
+            )
+            
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message="Connection request sent"
             ).to_response(status.HTTP_201_CREATED)
             
         except Exception as e:
+            # Get from_bleoid for logging if available
+            from_bleoid = None
+            try:
+                from_bleoid = request.data.get('from_bleoid')
+            except:
+                pass
+                
+            # Log error
+            Logger.debug_error(
+                f"Failed to send connection request: {str(e)}",
+                500,
+                from_bleoid,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to send connection request: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -134,9 +229,27 @@ class ConnectionResponseView(APIView):
     def put(self, request, connection_id):
         """Accept/Reject connection request"""
         try:
+            # Log request
+            action = request.data.get('action')
+            
+            # Log request
+            Logger.debug_system_action(
+                f"Processing connection response for connection_id={connection_id}, action={action}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Validate action using serializer
             serializer = ConnectionResponseSerializer(data=request.data)
             if not serializer.is_valid():
+                # Log validation error
+                Logger.debug_error(
+                    f"Invalid connection response data: {serializer.errors}",
+                    400,
+                    None,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.validation_error(
                     message="Invalid data",
                     errors=serializer.errors
@@ -149,13 +262,31 @@ class ConnectionResponseView(APIView):
             connection = db_links.find_one({"_id": ObjectId(connection_id)})
             
             if not connection:
+                # Log not found error
+                Logger.debug_error(
+                    f"Connection request with ID {connection_id} not found",
+                    404,
+                    None,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message="Connection request not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
+            # Extract user IDs for logging
+            from_bleoid = connection.get('BLEOIdPartner1')
+            to_bleoid = connection.get('BLEOIdPartner2')
+                
             # If accepting, check if receiver already has an active connection
             if action == 'accept':
-                to_bleoid = connection["BLEOIdPartner2"]
+                # Log acceptance check
+                Logger.debug_user_action(
+                    to_bleoid,
+                    f"Checking if user can accept connection from {from_bleoid}",
+                    LogType.INFO.value,
+                    200
+                )
                 
                 # Check if receiver already has an active connection
                 existing_to = db_links.find_one({
@@ -169,6 +300,15 @@ class ConnectionResponseView(APIView):
                 })
                 
                 if existing_to:
+                    # Log limit error
+                    other_user = existing_to.get('BLEOIdPartner1') if existing_to.get('BLEOIdPartner2') == to_bleoid else existing_to.get('BLEOIdPartner2')
+                    Logger.debug_error(
+                        f"User {to_bleoid} already has an active connection with {other_user}",
+                        400,
+                        to_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.error(
                         error_type="LimitExceeded",
                         error_message="You already have an active connection with someone else"
@@ -193,6 +333,14 @@ class ConnectionResponseView(APIView):
             )
             
             if result.modified_count == 0:
+                # Log no changes
+                Logger.debug_error(
+                    f"No changes made to connection {connection_id} with action {action}",
+                    400,
+                    to_bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.error(
                     error_type="UpdateError",
                     error_message="No changes made"
@@ -205,12 +353,28 @@ class ConnectionResponseView(APIView):
             # Serialize response
             response_serializer = ConnectionSerializer(updated_connection)
             
+            # Log success
+            Logger.debug_user_action(
+                to_bleoid,
+                f"Connection with {from_bleoid} updated to {status_map[action]} successfully",
+                LogType.SUCCESS.value,
+                200
+            )
+            
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message=f"Connection request {action}ed"
             ).to_response()
             
         except Exception as e:
+            # Log error
+            Logger.debug_error(
+                f"Failed to process connection response for ID {connection_id}: {str(e)}",
+                500,
+                None,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to process connection response: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -221,9 +385,28 @@ class ConnectionListView(APIView):
     def get(self, request):
         """Get all connections for a user"""
         try:
+            # Get bleoid for logging
+            bleoid = request.query_params.get('bleoid')
+            
+            # Log request
+            Logger.debug_user_action(
+                bleoid,
+                "Retrieving connections list",
+                LogType.INFO.value,
+                200
+            )
+            
             # Validate query parameters
             filter_serializer = ConnectionFilterSerializer(data=request.query_params)
             if not filter_serializer.is_valid():
+                # Log validation error
+                Logger.debug_error(
+                    f"Invalid connection filter parameters: {filter_serializer.errors}",
+                    400,
+                    bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.validation_error(
                     message="Invalid filter parameters",
                     errors=filter_serializer.errors
@@ -245,6 +428,14 @@ class ConnectionListView(APIView):
             # Add status filter if not 'all'
             if status_filter and status_filter != 'all':
                 query["status"] = status_filter
+            
+            # Log filter details
+            Logger.debug_user_action(
+                bleoid,
+                f"Filtering connections with: direction={direction}, status={status_filter or 'all'}",
+                LogType.INFO.value,
+                200
+            )
             
             # Get connections
             db_links = MongoDB.get_instance().get_collection('Links')
@@ -278,6 +469,14 @@ class ConnectionListView(APIView):
                 context={'current_user': bleoid}
             )
             
+            # Log success
+            Logger.debug_user_action(
+                bleoid,
+                f"Retrieved {len(connections)} connections successfully",
+                LogType.SUCCESS.value,
+                200
+            )
+            
             return BLEOResponse.success(
                 data={
                     "connections": serializer.data,
@@ -287,6 +486,21 @@ class ConnectionListView(APIView):
             ).to_response()
             
         except Exception as e:
+            # Get bleoid for logging if available
+            bleoid = None
+            try:
+                bleoid = request.query_params.get('bleoid')
+            except:
+                pass
+                
+            # Log error
+            Logger.debug_error(
+                f"Failed to retrieve connections: {str(e)}",
+                500,
+                bleoid,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to retrieve connections: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)

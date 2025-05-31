@@ -8,6 +8,8 @@ from utils.mongodb_schemas import (
     TOKEN_BLACKLIST_SCHEMA
 )
 from pymongo import ASCENDING
+from models.AppParameters import AppParameters
+from config.AppCurrentState import APP_VERSION, DEBUG_LEVEL
 
 class Command(BaseCommand):
     help = 'Drops all collections and recreates them with proper schema validation'
@@ -50,6 +52,28 @@ class Command(BaseCommand):
                 self.stdout.write(f"Creating {logical_name} collection...")
                 # Use the setup_collection method with verbose output
                 mongo_instance.setup_collection(actual_name, create=True, verbose=True)
+            
+            # Initialize AppParameters with config values from AppCurrentState
+            self.stdout.write(self.style.NOTICE(
+                f"Initializing AppParameters with configuration from AppCurrentState... "
+                f"(Version: {APP_VERSION}, Debug Level: {DEBUG_LEVEL})"
+            ))
+            try:
+                # Create AppParameters with values from AppCurrentState.py
+                app_params = AppParameters(
+                    debug_level=DEBUG_LEVEL,  
+                    app_version=APP_VERSION,
+                )
+                
+                # Insert into collection
+                app_params_collection = db[MongoDB.COLLECTIONS.get('app_parameters', 'AppParameters')]
+                app_params_collection.insert_one(app_params.to_dict())
+                
+                self.stdout.write(self.style.SUCCESS("AppParameters initialized successfully."))
+            except Exception as e:
+                self.stdout.write(
+                    self.style.WARNING(f"Warning: Could not initialize AppParameters: {str(e)}")
+                )
             
             self.stdout.write(
                 self.style.SUCCESS("✅ Collections reset complete. All collections have been recreated with proper schema validation.")

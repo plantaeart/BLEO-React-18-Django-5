@@ -1,8 +1,13 @@
 from rest_framework import serializers
-from models.enums.EnergyPleasantnessType import EnergyLevel, Pleasantness
 from models.enums.MessageType import MessageType
 from models.enums.ConnectionStatus import ConnectionStatus
 from datetime import datetime
+from models.enums.EnergyLevelType import EnergyLevelType
+from models.enums.PleasantnessType import PleasantnessType
+from models.enums.UserType import UserType
+from models.enums.LogType import LogType
+from models.enums.ErrorSourceType import ErrorSourceType
+from models.enums.DebugType import DebugType
 
 class FlexibleDateField(serializers.Field):
     """Custom field to handle multiple date formats"""
@@ -41,8 +46,8 @@ class MessageInfosSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
     text = serializers.CharField()
     type = serializers.ChoiceField(choices=[t.value for t in MessageType])
-    created_at = serializers.DateTimeField(required=False)
-    date = serializers.CharField(required=False, read_only=True)  # For when returning messages with dates
+    created_at = serializers.DateTimeField(default=datetime.now, format="%Y-%m-%dT%H:%M:%S")
+    date = serializers.CharField(required=False, read_only=True)
     
     def validate_type(self, value):
         """Additional validation for message type"""
@@ -108,25 +113,27 @@ class LinkSerializer(serializers.Serializer):
             
         return data
 
-class MessagesDayserializer(serializers.Serializer):
-    BLEOId = serializers.CharField()
-    date = FlexibleDateField()
-    messages = MessageInfosSerializer(many=True, required=False, default=list)
+class MessagesDaysSerializer(serializers.Serializer):
+    """Serializer for MessagesDays"""
+    fromBLEOId = serializers.CharField(required=True)
+    toBLEOId = serializers.CharField(required=True)
+    date = serializers.CharField(required=True)
+    messages = MessageInfosSerializer(many=True, required=False, default=[])
     mood = serializers.CharField(required=False, allow_null=True)
     energy_level = serializers.CharField(required=False, allow_null=True)
     pleasantness = serializers.CharField(required=False, allow_null=True)
-    quadrant = serializers.CharField(required=False, read_only=True)
+    quadrant = serializers.CharField(required=False, allow_null=True, read_only=True)
     
     def validate(self, data):
         """Validate mood, energy_level and pleasantness compatibility"""
         energy = data.get('energy_level')
         pleasant = data.get('pleasantness')
         
-        if energy and energy not in [e.value for e in EnergyLevel]:
-            raise serializers.ValidationError({"energy_level": f"Invalid energy level. Must be one of: {', '.join([e.value for e in EnergyLevel])}"})
+        if energy and energy not in [e.value for e in EnergyLevelType]:
+            raise serializers.ValidationError({"energy_level": f"Invalid energy level. Must be one of: {', '.join([e.value for e in EnergyLevelType])}"})
             
-        if pleasant and pleasant not in [p.value for p in Pleasantness]:
-            raise serializers.ValidationError({"pleasantness": f"Invalid pleasantness value. Must be one of: {', '.join([p.value for p in Pleasantness])}"})
+        if pleasant and pleasant not in [p.value for p in PleasantnessType]:
+            raise serializers.ValidationError({"pleasantness": f"Invalid pleasantness value. Must be one of: {', '.join([p.value for p in PleasantnessType])}"})
             
         return data
 
@@ -211,3 +218,49 @@ class ConnectionFilterSerializer(serializers.Serializer):
         default="both",
         required=False
     )
+
+class DebugLogSerializer(serializers.Serializer):
+    """Serializer for validating log data from API requests"""
+    message = serializers.CharField(required=True)
+    type = serializers.CharField(required=True)
+    code = serializers.IntegerField(required=True)
+    BLEOId = serializers.CharField(required=False, allow_null=True)
+    user_type = serializers.CharField(required=False, default=UserType.USER.value)
+    error_source = serializers.CharField(required=False, allow_null=True)
+
+    def validate_type(self, value):
+        """Validate that type is a valid LogType"""
+        if value not in [t.value for t in LogType]:
+            raise serializers.ValidationError(
+                f"Invalid log type. Must be one of: {', '.join([t.value for t in LogType])}"
+            )
+        return value
+
+    def validate_user_type(self, value):
+        """Validate that user_type is a valid UserType"""
+        if value not in [t.value for t in UserType]:
+            raise serializers.ValidationError(
+                f"Invalid user type. Must be one of: {', '.join([t.value for t in UserType])}"
+            )
+        return value
+        
+    def validate_error_source(self, value):
+        """Validate that error_source is a valid ErrorSourceType"""
+        if value is not None and value not in [t.value for t in ErrorSourceType]:
+            raise serializers.ValidationError(
+                f"Invalid error source. Must be one of: {', '.join([t.value for t in ErrorSourceType])}"
+            )
+        return value
+
+class AppParametersSerializer(serializers.Serializer):
+    """Serializer for app parameters"""
+    id = serializers.CharField(default="app_parameters", read_only=True)
+    debug_level = serializers.CharField(required=False, default=DebugType.NO_DEBUG.value)
+    app_version = serializers.CharField(required=False, default="1.0.0")
+    
+    def validate_debug_level(self, value):
+        if value not in [level.value for level in DebugType]:
+            raise serializers.ValidationError(
+                f"Invalid debug level. Must be one of: {', '.join([level.value for level in DebugType])}"
+            )
+        return value

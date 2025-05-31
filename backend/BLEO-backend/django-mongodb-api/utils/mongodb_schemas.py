@@ -108,11 +108,15 @@ MESSAGE_INFOS_SCHEMA = {
 MESSAGE_DAY_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOId", "date"],
+        "required": ["fromBLEOId", "toBLEOId", "date"],
         "properties": {
-            "BLEOId": {
+            "fromBLEOId": {
                 "bsonType": "string",
-                "description": "User BLEO identifier"
+                "description": "User BLEO identifier (sender)"
+            },
+            "toBLEOId": {
+                "bsonType": "string",
+                "description": "Partner BLEO identifier (recipient)"
             },
             "date": {
                 "bsonType": "date",
@@ -177,6 +181,69 @@ TOKEN_BLACKLIST_SCHEMA = {
             "expires_at": {
                 "bsonType": "date",
                 "description": "When the token will expire (for cleanup)"
+            }
+        }
+    }
+}
+
+DEBUG_LOGS_SCHEMA = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["id", "date", "message", "type", "code", "user_type"],
+        "properties": {
+            "id": {
+                "bsonType": "int",
+                "description": "Auto-incremented unique log entry identifier"
+            },
+            "date": {
+                "bsonType": "date",
+                "description": "Log date and time"
+            },
+            "BLEOId": {
+                "bsonType": ["string", "null"],
+                "description": "User BLEO identifier (if applicable)"
+            },
+            "user_type": {
+                "enum": ["user", "system"],
+                "description": "Type of user (user or system)"
+            },
+            "message": {
+                "bsonType": "string",
+                "description": "Log message content"
+            },
+            "type": {
+                "bsonType": "string",
+                "description": "Log type category"
+            },
+            "code": {
+                "bsonType": "int",
+                "description": "Error or success code"
+            },
+            "error_source": {
+                "bsonType": ["string", "null"],
+                "enum": ["server", "application", None],
+                "description": "Source of the error (server or application)"
+            }
+        }
+    }
+}
+
+APP_PARAMETERS_SCHEMA = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["id", "debug_level", "app_version"],
+        "properties": {
+            "id": {
+                "bsonType": "string",
+                "description": "ID for the app parameters (should be 'app_parameters')"
+            },
+            "debug_level": {
+                "enum": ["NO_DEBUG", "DEBUG"],
+                "description": "Debug level setting"
+            },
+            "app_version": {
+                "bsonType": "string",
+                "description": "Application version"
             }
         }
     }

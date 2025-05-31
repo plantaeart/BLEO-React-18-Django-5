@@ -5,7 +5,10 @@ from utils.mongodb_utils import MongoDB
 from bson import ObjectId
 from datetime import datetime
 from models.response.BLEOResponse import BLEOResponse
-from api.serializers import LinkSerializer  # Import the serializer
+from api.serializers import LinkSerializer
+from utils.logger import Logger
+from models.enums.LogType import LogType
+from models.enums.ErrorSourceType import ErrorSourceType
 
 class LinkListCreateView(APIView):
     """API view for listing and creating links"""
@@ -13,6 +16,13 @@ class LinkListCreateView(APIView):
     def get(self, request):
         """Get all links"""
         try:
+            # Log request
+            Logger.debug_system_action(
+                "Getting all links",
+                LogType.INFO.value,
+                200
+            )
+            
             db = MongoDB.get_instance().get_collection('Links')
             links = list(db.find({}))
             
@@ -22,6 +32,13 @@ class LinkListCreateView(APIView):
             
             # Serialize the links
             serializer = LinkSerializer(links, many=True)
+            
+            # Log success
+            Logger.debug_system_action(
+                f"Retrieved {len(links)} links successfully",
+                LogType.SUCCESS.value,
+                200
+            )
                 
             return BLEOResponse.success(
                 data=serializer.data,
@@ -29,6 +46,14 @@ class LinkListCreateView(APIView):
             ).to_response()
             
         except Exception as e:
+            # Log error
+            Logger.debug_error(
+                f"Failed to retrieve links: {str(e)}",
+                500,
+                None,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to retrieve links: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -36,9 +61,27 @@ class LinkListCreateView(APIView):
     def post(self, request):
         """Create a new link with BLEOIdPartner1 required, BLEOIdPartner2 optional"""
         try:
+            # Get BLEOIdPartner1 from request data
+            bleoidPartner1 = request.data.get('BLEOIdPartner1')
+            
+            # Log request
+            Logger.debug_system_action(
+                f"Creating new link for BLEOIdPartner1={bleoidPartner1}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Use serializer for validation
             serializer = LinkSerializer(data=request.data)
             if not serializer.is_valid():
+                # Log validation errors
+                Logger.debug_error(
+                    f"Link creation validation failed: {serializer.errors}",
+                    400,
+                    None,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.validation_error(
                     message="Invalid data",
                     errors=serializer.errors
@@ -53,6 +96,14 @@ class LinkListCreateView(APIView):
             user1 = db_users.find_one({"BLEOId": bleoidPartner1})
             
             if not user1:
+                # Log user not found error
+                Logger.debug_error(
+                    f"User with BLEOId {bleoidPartner1} not found when creating link",
+                    404,
+                    None,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message=f"User with BLEOId {bleoidPartner1} not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
@@ -60,6 +111,14 @@ class LinkListCreateView(APIView):
             if bleoidPartner2:
                 user2 = db_users.find_one({"BLEOId": bleoidPartner2})
                 if not user2:
+                    # Log second user not found error
+                    Logger.debug_error(
+                        f"User with BLEOId {bleoidPartner2} not found when creating link",
+                        404,
+                        bleoidPartner1,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.not_found(
                         message=f"User with BLEOId {bleoidPartner2} not found"
                     ).to_response(status.HTTP_404_NOT_FOUND)
@@ -69,6 +128,14 @@ class LinkListCreateView(APIView):
             existing_link = db_links.find_one({"BLEOIdPartner1": bleoidPartner1})
             
             if existing_link:
+                # Log duplicate link error
+                Logger.debug_error(
+                    f"Link with BLEOIdPartner1={bleoidPartner1} already exists",
+                    409,
+                    bleoidPartner1,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.error(
                     error_type="DuplicateError",
                     error_message=f"Link with BLEOIdPartner1={bleoidPartner1} already exists"
@@ -93,12 +160,35 @@ class LinkListCreateView(APIView):
             # Serialize response
             response_serializer = LinkSerializer(created_link)
             
+            # Log success
+            Logger.debug_user_action(
+                bleoidPartner1,
+                f"Link created successfully" + (f" with partner {bleoidPartner2}" if bleoidPartner2 else ""),
+                LogType.SUCCESS.value,
+                201
+            )
+            
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message="Link created successfully"
             ).to_response(status.HTTP_201_CREATED)
             
         except Exception as e:
+            # Get BLEOIdPartner1 if available
+            bleoidPartner1 = None
+            try:
+                bleoidPartner1 = request.data.get('BLEOIdPartner1')
+            except:
+                pass
+                
+            # Log error
+            Logger.debug_error(
+                f"Failed to create link: {str(e)}",
+                500,
+                bleoidPartner1,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to create link: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -115,10 +205,25 @@ class LinkDetailView(APIView):
     def get(self, request, bleoidPartner1):
         """Get a link by BLEOIdPartner1"""
         try:
+            # Log request
+            Logger.debug_system_action(
+                f"Getting link for BLEOIdPartner1={bleoidPartner1}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Get link by BLEOIdPartner1 (now a string)
             link = self.get_object(bleoidPartner1)
             
             if link is None:
+                # Log not found error
+                Logger.debug_error(
+                    f"No link found for BLEOIdPartner1={bleoidPartner1}",
+                    404,
+                    bleoidPartner1,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
@@ -128,6 +233,14 @@ class LinkDetailView(APIView):
             
             # Serialize the link
             serializer = LinkSerializer(link)
+            
+            # Log success
+            Logger.debug_user_action(
+                bleoidPartner1,
+                "Link retrieved successfully",
+                LogType.SUCCESS.value,
+                200
+            )
                 
             return BLEOResponse.success(
                 data=serializer.data,
@@ -135,6 +248,14 @@ class LinkDetailView(APIView):
             ).to_response()
                 
         except Exception as e:
+            # Log error
+            Logger.debug_error(
+                f"Failed to retrieve link for BLEOIdPartner1={bleoidPartner1}: {str(e)}",
+                500,
+                bleoidPartner1,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to retrieve link: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)           
@@ -142,10 +263,25 @@ class LinkDetailView(APIView):
     def put(self, request, bleoidPartner1):
         """Update a link"""
         try:
+            # Log request
+            Logger.debug_system_action(
+                f"Updating link for BLEOIdPartner1={bleoidPartner1}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Get the link
             link = self.get_object(bleoidPartner1)
             
             if link is None:
+                # Log not found error
+                Logger.debug_error(
+                    f"No link found for BLEOIdPartner1={bleoidPartner1} during update",
+                    404,
+                    bleoidPartner1,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
@@ -156,6 +292,14 @@ class LinkDetailView(APIView):
             # Validate with serializer
             serializer = LinkSerializer(data=request.data, partial=True)
             if not serializer.is_valid():
+                # Log validation error
+                Logger.debug_error(
+                    f"Link update validation failed: {serializer.errors}",
+                    400,
+                    bleoidPartner1,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.validation_error(
                     message="Invalid data",
                     errors=serializer.errors
@@ -175,6 +319,14 @@ class LinkDetailView(APIView):
                 db_users = MongoDB.get_instance().get_collection('Users')
                 user2 = db_users.find_one({"BLEOId": new_bleoidPartner2})
                 if not user2:
+                    # Log user not found error
+                    Logger.debug_error(
+                        f"User with BLEOId {new_bleoidPartner2} not found during link update",
+                        404,
+                        bleoidPartner1,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.not_found(
                         message=f"User with BLEOId {new_bleoidPartner2} not found"
                     ).to_response(status.HTTP_404_NOT_FOUND)
@@ -183,6 +335,14 @@ class LinkDetailView(APIView):
                 db = MongoDB.get_instance().get_collection('Links')
                 partner2_link = db.find_one({"BLEOIdPartner1": new_bleoidPartner2})
                 if not partner2_link:
+                    # Log partner link not found error
+                    Logger.debug_error(
+                        f"User with BLEOId {new_bleoidPartner2} does not have a link",
+                        404,
+                        bleoidPartner1,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     return BLEOResponse.not_found(
                         message=f"User with BLEOId {new_bleoidPartner2} does not have a link"
                     ).to_response(status.HTTP_404_NOT_FOUND)
@@ -192,6 +352,14 @@ class LinkDetailView(APIView):
             
             # Always update the updated_at timestamp
             validated_data['updated_at'] = datetime.now()
+            
+            # Log operation details
+            Logger.debug_user_action(
+                bleoidPartner1,
+                f"Updating link: current partner={current_bleoidPartner2}, new partner={new_bleoidPartner2}",
+                LogType.INFO.value,
+                200
+            )
             
             # STEP 1: Update the current link
             result1 = db.update_one(
@@ -207,6 +375,14 @@ class LinkDetailView(APIView):
                     {"$set": {"BLEOIdPartner2": bleoidPartner1, "updated_at": datetime.now()}}
                 )
                 if result2.modified_count == 0:
+                    # Log warning
+                    Logger.debug_error(
+                        f"Could not update reciprocal link for BLEOIdPartner1={new_bleoidPartner2}",
+                        200,
+                        bleoidPartner1,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     print(f"Warning: Could not update reciprocal link for BLEOIdPartner1={new_bleoidPartner2}")
             
             # STEP 3: If we previously had a partner, update their link to remove us
@@ -218,9 +394,25 @@ class LinkDetailView(APIView):
                     {"$set": {"BLEOIdPartner2": None, "updated_at": datetime.now()}}
                 )
                 if result3.modified_count == 0:
+                    # Log warning
+                    Logger.debug_error(
+                        f"Could not update previous partner's link for BLEOIdPartner1={current_bleoidPartner2}",
+                        200,
+                        bleoidPartner1,
+                        ErrorSourceType.SERVER.value
+                    )
+                    
                     print(f"Warning: Could not update previous partner's link for BLEOIdPartner1={current_bleoidPartner2}")
             
             if result1.modified_count == 0:
+                # Log no changes
+                Logger.debug_user_action(
+                    bleoidPartner1,
+                    "No changes made to link",
+                    LogType.INFO.value,
+                    200
+                )
+                
                 return BLEOResponse.success(
                     message="No changes made"
                 ).to_response(status.HTTP_200_OK)
@@ -232,12 +424,28 @@ class LinkDetailView(APIView):
             # Serialize the response
             response_serializer = LinkSerializer(updated_link)
             
+            # Log success
+            Logger.debug_user_action(
+                bleoidPartner1,
+                f"Link updated successfully with partner {updated_link.get('BLEOIdPartner2')}",
+                LogType.SUCCESS.value,
+                200
+            )
+            
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message="Link updated successfully"
             ).to_response()
             
         except Exception as e:
+            # Log error
+            Logger.debug_error(
+                f"Failed to update link for BLEOIdPartner1={bleoidPartner1}: {str(e)}",
+                500,
+                bleoidPartner1,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to update link: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -245,10 +453,25 @@ class LinkDetailView(APIView):
     def delete(self, request, bleoidPartner1):
         """Delete a link by BLEOIdPartner1"""
         try:
+            # Log request
+            Logger.debug_system_action(
+                f"Deleting link for BLEOIdPartner1={bleoidPartner1}",
+                LogType.INFO.value,
+                200
+            )
+            
             # Check if link exists
             link = self.get_object(bleoidPartner1)
             
             if link is None:
+                # Log not found error
+                Logger.debug_error(
+                    f"No link found for BLEOIdPartner1={bleoidPartner1} during deletion",
+                    404,
+                    bleoidPartner1,
+                    ErrorSourceType.SERVER.value
+                )
+                
                 return BLEOResponse.not_found(
                     message=f"No link found for BLEOIdPartner1={bleoidPartner1}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
@@ -262,16 +485,46 @@ class LinkDetailView(APIView):
             
             # If this link had a partner, update their link too
             if bleoidPartner2:
-                db.update_one(
+                # Log operation
+                Logger.debug_system_action(
+                    f"Updating partner link for BLEOIdPartner1={bleoidPartner2}",
+                    LogType.INFO.value,
+                    200
+                )
+                
+                update_result = db.update_one(
                     {"BLEOIdPartner1": bleoidPartner2},
                     {"$set": {"BLEOIdPartner2": None, "updated_at": datetime.now()}}
                 )
+                
+                if update_result.modified_count > 0:
+                    Logger.debug_system_action(
+                        f"Successfully removed partner reference from BLEOIdPartner1={bleoidPartner2}",
+                        LogType.SUCCESS.value,
+                        200
+                    )
+            
+            # Log success
+            Logger.debug_user_action(
+                bleoidPartner1,
+                f"Link deleted successfully" + (f" (was linked to {bleoidPartner2})" if bleoidPartner2 else ""),
+                LogType.SUCCESS.value,
+                200
+            )
                 
             return BLEOResponse.success(
                 message="Link deleted successfully"
             ).to_response(status.HTTP_200_OK)  # Using 200 instead of 204 to include the success message
             
         except Exception as e:
+            # Log error
+            Logger.debug_error(
+                f"Failed to delete link for BLEOIdPartner1={bleoidPartner1}: {str(e)}",
+                500,
+                bleoidPartner1,
+                ErrorSourceType.SERVER.value
+            )
+            
             return BLEOResponse.server_error(
                 message=f"Failed to delete link: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
