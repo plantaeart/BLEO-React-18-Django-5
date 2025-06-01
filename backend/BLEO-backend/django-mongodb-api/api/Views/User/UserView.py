@@ -43,7 +43,7 @@ class UserListCreateView(APIView):
             return BLEOResponse.success(
                 data=serializer.data,
                 message="Users retrieved successfully"
-            ).to_response()
+            ).to_response(status.HTTP_200_OK)
         except Exception as e:
             # Log error
             Logger.debug_error(
@@ -234,7 +234,7 @@ class UserDetailView(APIView):
             return BLEOResponse.success(
                 data=serializer.data,
                 message="User retrieved successfully"
-            ).to_response()
+            ).to_response(status.HTTP_200_OK)
             
         except Exception as e:
             # Log error
@@ -353,7 +353,7 @@ class UserDetailView(APIView):
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message="User updated successfully"
-            ).to_response()
+            ).to_response(status.HTTP_200_OK)
         
         except Exception as e:
             # Log error

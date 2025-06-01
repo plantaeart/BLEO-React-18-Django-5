@@ -209,7 +209,8 @@ class UserViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data['errorType'], 'ValidationError')
-        self.assertIn('email', response.data['data']['validation_errors'])
+        
+        self.assertIn('email', response.data['validationErrors'])
         
         print("  🔹 Properly rejected invalid data (missing email)")
     
@@ -328,7 +329,7 @@ class UserViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data['errorType'], 'ValidationError')
-        self.assertIn('email', response.data['data']['validation_errors'])
+        self.assertIn('email', response.data['validationErrors'])
         
         print("  🔹 Properly rejected invalid update data")
     

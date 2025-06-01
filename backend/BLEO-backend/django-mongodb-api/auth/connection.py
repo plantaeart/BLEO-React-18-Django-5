@@ -5,7 +5,7 @@ from utils.mongodb_utils import MongoDB
 from bson import ObjectId
 from datetime import datetime
 from api.serializers import ConnectionRequestSerializer, ConnectionSerializer, ConnectionResponseSerializer, UserSerializer, ConnectionFilterSerializer
-from models.enums.ConnectionStatus import ConnectionStatus
+from models.enums.ConnectionStatusType import ConnectionStatusType
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
@@ -72,7 +72,7 @@ class ConnectionRequestView(APIView):
             existing_from = db_links.find_one({
                 "BLEOIdPartner1": from_bleoid,
                 "BLEOIdPartner2": {"$ne": None},
-                "status": {"$in": [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED]}
+                "status": {"$in": [ConnectionStatusType.PENDING, ConnectionStatusType.ACCEPTED]}
             })
             
             if existing_from:
@@ -106,8 +106,8 @@ class ConnectionRequestView(APIView):
             # Check if receiver already has an active connection
             existing_to = db_links.find_one({
                 "$or": [
-                    {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatus.ACCEPTED},
-                    {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatus.ACCEPTED}
+                    {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
+                    {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
                 ]
             })
             
@@ -130,7 +130,7 @@ class ConnectionRequestView(APIView):
             existing_rejected = db_links.find_one({
                 "BLEOIdPartner1": from_bleoid,
                 "BLEOIdPartner2": to_bleoid,
-                "status": {"$in": [ConnectionStatus.REJECTED, ConnectionStatus.BLOCKED]}
+                "status": {"$in": [ConnectionStatusType.REJECTED, ConnectionStatusType.BLOCKED]}
             })
             
             if existing_rejected:
@@ -147,7 +147,7 @@ class ConnectionRequestView(APIView):
                     {"_id": existing_rejected["_id"]},
                     {
                         "$set": {
-                            "status": ConnectionStatus.PENDING,
+                            "status": ConnectionStatusType.PENDING,
                             "updated_at": datetime.now()
                         }
                     }
@@ -176,7 +176,7 @@ class ConnectionRequestView(APIView):
             link = {
                 "BLEOIdPartner1": from_bleoid,
                 "BLEOIdPartner2": to_bleoid,
-                "status": ConnectionStatus.PENDING,
+                "status": ConnectionStatusType.PENDING,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }
@@ -293,8 +293,8 @@ class ConnectionResponseView(APIView):
                     "$and": [
                         {"_id": {"$ne": ObjectId(connection_id)}},  # Exclude current connection
                         {"$or": [
-                            {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatus.ACCEPTED},
-                            {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatus.ACCEPTED}
+                            {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
+                            {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
                         ]}
                     ]
                 })
@@ -316,9 +316,9 @@ class ConnectionResponseView(APIView):
             
             # Map action to status
             status_map = {
-                'accept': ConnectionStatus.ACCEPTED,
-                'reject': ConnectionStatus.REJECTED,
-                'block': ConnectionStatus.BLOCKED
+                'accept': ConnectionStatusType.ACCEPTED,
+                'reject': ConnectionStatusType.REJECTED,
+                'block': ConnectionStatusType.BLOCKED
             }
             
             # Update connection

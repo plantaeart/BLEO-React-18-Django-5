@@ -514,7 +514,7 @@ class LinkDetailView(APIView):
                 
             return BLEOResponse.success(
                 message="Link deleted successfully"
-            ).to_response(status.HTTP_200_OK)  # Using 200 instead of 204 to include the success message
+            ).to_response(status.HTTP_200_OK)
             
         except Exception as e:
             # Log error

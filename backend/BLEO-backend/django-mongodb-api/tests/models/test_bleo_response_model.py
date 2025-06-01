@@ -151,7 +151,7 @@ class BLEOResponseModelTest(BLEOBaseTest):
         )
         self.assertEqual(validation_error.error_type, "ValidationError")
         self.assertEqual(validation_error.error_message, "Invalid data")
-        self.assertEqual(validation_error.data["validation_errors"]["field"][0], "Field error")
+        self.assertEqual(validation_error.validation_errors["field"][0], "Field error")
         
         # server_error
         server_error = BLEOResponse.server_error("Server crashed")

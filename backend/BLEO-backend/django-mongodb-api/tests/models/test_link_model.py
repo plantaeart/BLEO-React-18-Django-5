@@ -1,5 +1,5 @@
 from tests.base_test import BLEOBaseTest, run_test_with_output
-from models.Link import Link, ConnectionStatus
+from models.Link import Link, ConnectionStatusType
 from datetime import datetime
 import time
 
@@ -15,7 +15,7 @@ class LinkModelTest(BLEOBaseTest):
         
         # Check default values
         self.assertIsNone(link.BLEOIdPartner2)
-        self.assertEqual(link.status, ConnectionStatus.PENDING.value)
+        self.assertEqual(link.status, ConnectionStatusType.PENDING.value)
         self.assertIsNotNone(link.created_at)
         self.assertIsNotNone(link.updated_at)
         
@@ -29,7 +29,7 @@ class LinkModelTest(BLEOBaseTest):
         link = Link(
             BLEOIdPartner1="DEF456",
             BLEOIdPartner2="GHI789",
-            status=ConnectionStatus.ACCEPTED.value,
+            status=ConnectionStatusType.ACCEPTED.value,
             created_at=created_at,
             updated_at=updated_at
         )
@@ -37,7 +37,7 @@ class LinkModelTest(BLEOBaseTest):
         # Check all fields were set correctly
         self.assertEqual(link.BLEOIdPartner1, "DEF456")
         self.assertEqual(link.BLEOIdPartner2, "GHI789")
-        self.assertEqual(link.status, ConnectionStatus.ACCEPTED.value)
+        self.assertEqual(link.status, ConnectionStatusType.ACCEPTED.value)
         self.assertEqual(link.created_at, created_at)
         self.assertEqual(link.updated_at, updated_at)
         
@@ -69,7 +69,7 @@ class LinkModelTest(BLEOBaseTest):
         link = Link(
             BLEOIdPartner1="MNO345",
             BLEOIdPartner2="PQR678",
-            status=ConnectionStatus.REJECTED.value,
+            status=ConnectionStatusType.REJECTED.value,
             created_at=created_at,
             updated_at=updated_at
         )
@@ -79,20 +79,20 @@ class LinkModelTest(BLEOBaseTest):
         # Check all fields are in the dict
         self.assertEqual(link_dict["BLEOIdPartner1"], "MNO345")
         self.assertEqual(link_dict["BLEOIdPartner2"], "PQR678")
-        self.assertEqual(link_dict["status"], ConnectionStatus.REJECTED.value)
+        self.assertEqual(link_dict["status"], ConnectionStatusType.REJECTED.value)
         self.assertEqual(link_dict["created_at"], created_at)
         self.assertEqual(link_dict["updated_at"], updated_at)
         
         print("  🔹 to_dict method returns complete dictionary with all fields")
     
     def test_connection_status_enum_values(self):
-        """Test ConnectionStatus enum has correct values"""
-        self.assertEqual(ConnectionStatus.PENDING.value, "pending")
-        self.assertEqual(ConnectionStatus.ACCEPTED.value, "accepted")
-        self.assertEqual(ConnectionStatus.REJECTED.value, "rejected")
-        self.assertEqual(ConnectionStatus.BLOCKED.value, "blocked")
+        """Test ConnectionStatusType enum has correct values"""
+        self.assertEqual(ConnectionStatusType.PENDING.value, "pending")
+        self.assertEqual(ConnectionStatusType.ACCEPTED.value, "accepted")
+        self.assertEqual(ConnectionStatusType.REJECTED.value, "rejected")
+        self.assertEqual(ConnectionStatusType.BLOCKED.value, "blocked")
         
-        print("  🔹 ConnectionStatus enum has expected values")
+        print("  🔹 ConnectionStatusType enum has expected values")
 
 
 # This will run if this file is executed directly

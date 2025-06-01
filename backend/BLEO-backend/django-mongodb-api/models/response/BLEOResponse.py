@@ -20,12 +20,16 @@ class BLEOResponse(Generic[T]):
         data: Optional[T] = None,
         success_message: Optional[str] = None,
         error_type: Optional[str] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        status_code: Optional[int] = None,
+        validation_errors: Optional[Dict[str, Any]] = None
     ):
         self.data = data
         self.success_message = success_message
         self.error_type = error_type
         self.error_message = error_message
+        self.status_code = status_code
+        self.validation_errors = validation_errors if validation_errors is not None else {}
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert response to dictionary for JSON serialization."""
@@ -33,7 +37,9 @@ class BLEOResponse(Generic[T]):
             "data": self.data,
             "successMessage": self.success_message,
             "errorType": self.error_type,
-            "errorMessage": self.error_message
+            "errorMessage": self.error_message,
+            "statusCode": self.status_code,
+            "validationErrors": self.validation_errors
         }
     
     def to_response(self, status_code: int = None) -> Response:
@@ -47,6 +53,10 @@ class BLEOResponse(Generic[T]):
                 # Default success status
                 status_code = status.HTTP_200_OK
         
+        # Update the internal status_code attribute
+        self.status_code = status_code
+        
+        # Now convert to Response with the updated status
         return Response(self.to_dict(), status=status_code)
     
     @classmethod
@@ -56,7 +66,8 @@ class BLEOResponse(Generic[T]):
             data=data,
             success_message=message,
             error_type=None,
-            error_message=None
+            error_message=None,
+            validation_errors=None,
         )
     
     @classmethod
@@ -84,7 +95,7 @@ class BLEOResponse(Generic[T]):
         
         # Add validation errors if provided
         if errors:
-            response.data = {"validation_errors": errors}
+            response.validation_errors = errors
             
         return response
     

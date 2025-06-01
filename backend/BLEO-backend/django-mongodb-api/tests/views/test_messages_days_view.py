@@ -539,7 +539,7 @@ class MessagesDaysViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data['errorType'], 'ValidationError')
-        self.assertIn('energy_level', response.data['data']['validation_errors'])
+        self.assertIn('energy_level', response.data['validationErrors'])
         
         print("  🔹 Properly rejected invalid message day data")
     

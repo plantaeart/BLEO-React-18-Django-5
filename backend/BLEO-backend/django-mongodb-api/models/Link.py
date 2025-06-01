@@ -1,12 +1,6 @@
-from enum import Enum
 from typing import Dict, Any, Optional
 from datetime import datetime
-
-class ConnectionStatus(str, Enum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    BLOCKED = "blocked"
+from .enums.ConnectionStatusType import ConnectionStatusType
 
 class Link:
     """Connection between users"""
@@ -14,7 +8,7 @@ class Link:
         self,
         BLEOIdPartner1: str,
         BLEOIdPartner2: Optional[str] = None,
-        status: str = ConnectionStatus.PENDING.value,
+        status: str = ConnectionStatusType.PENDING.value,
         created_at: datetime = None,
         updated_at: datetime = None,
     ):

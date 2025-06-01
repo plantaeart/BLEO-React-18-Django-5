@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from models.enums.MessageType import MessageType
-from models.enums.ConnectionStatus import ConnectionStatus
+from models.enums.ConnectionStatusType import ConnectionStatusType
 from datetime import datetime
 from models.enums.EnergyLevelType import EnergyLevelType
 from models.enums.PleasantnessType import PleasantnessType
@@ -151,9 +151,9 @@ class ConnectionResponseSerializer(serializers.Serializer):
     """Serializer for connection responses"""
     # Map actions to their resulting status values
     ACTION_STATUS_MAP = {
-        'accept': ConnectionStatus.ACCEPTED,
-        'reject': ConnectionStatus.REJECTED,
-        'block': ConnectionStatus.BLOCKED
+        'accept': ConnectionStatusType.ACCEPTED,
+        'reject': ConnectionStatusType.REJECTED,
+        'block': ConnectionStatusType.BLOCKED
     }
     
     action = serializers.ChoiceField(choices=list(ACTION_STATUS_MAP.keys()))
@@ -179,12 +179,12 @@ class ConnectionSerializer(serializers.Serializer):
     BLEOIdPartner2 = serializers.CharField(allow_null=True)
     status = serializers.ChoiceField(
         choices=[
-            ConnectionStatus.PENDING,
-            ConnectionStatus.ACCEPTED, 
-            ConnectionStatus.REJECTED, 
-            ConnectionStatus.BLOCKED
+            ConnectionStatusType.PENDING,
+            ConnectionStatusType.ACCEPTED, 
+            ConnectionStatusType.REJECTED, 
+            ConnectionStatusType.BLOCKED
         ],
-        default=ConnectionStatus.PENDING
+        default=ConnectionStatusType.PENDING
     )
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
