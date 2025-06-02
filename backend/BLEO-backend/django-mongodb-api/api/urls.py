@@ -11,7 +11,7 @@ from auth.password_reset import PasswordResetRequestView, PasswordResetConfirmVi
 from auth.email_verification import EmailVerificationView
 from auth.connection import ConnectionRequestView, ConnectionResponseView, ConnectionListView
 from auth.token_validation import TokenValidationView
-from api.Views.DebugLogs.debug_log_views import LoggingView, AdminLogsView, AdminLogDetailView
+from api.Views.DebugLogs.DebugLogViews import LoggingView, AdminLogsView, AdminLogDetailView
 from api.Views.AppParameters.AppParametersView import AppParametersView
 
 urlpatterns = [

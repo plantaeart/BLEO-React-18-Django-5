@@ -60,6 +60,7 @@ class AdminLogsView(APIView):
             log_type = request.query_params.get('type')
             bleoid = request.query_params.get('bleoid')
             error_source = request.query_params.get('error_source')
+            user_type = request.query_params.get('user_type')
             
             # Date range filtering
             days = request.query_params.get('days')
@@ -80,6 +81,10 @@ class AdminLogsView(APIView):
             # Error source filter
             if error_source:
                 query['error_source'] = error_source
+                
+            # User type filter - Add this block
+            if user_type:
+                query['user_type'] = user_type
             
             # Date filters
             if days:
@@ -125,7 +130,6 @@ class AdminLogsView(APIView):
                 {"error": "Failed to retrieve logs"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class AdminLogDetailView(APIView):
     """API endpoint for retrieving a specific log by ID"""
