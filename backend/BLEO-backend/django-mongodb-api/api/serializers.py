@@ -8,6 +8,7 @@ from models.enums.UserType import UserType
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
 from models.enums.DebugType import DebugType
+from models.AppParameters import AppParameters
 
 class FlexibleDateField(serializers.Field):
     """Custom field to handle multiple date formats"""
@@ -254,13 +255,20 @@ class DebugLogSerializer(serializers.Serializer):
 
 class AppParametersSerializer(serializers.Serializer):
     """Serializer for app parameters"""
-    id = serializers.CharField(default="app_parameters", read_only=True)
-    debug_level = serializers.CharField(required=False, default=DebugType.NO_DEBUG.value)
-    app_version = serializers.CharField(required=False, default="1.0.0")
+    id = serializers.IntegerField(required=False, read_only=True)
+    param_name = serializers.CharField(required=True)
+    param_value = serializers.JSONField(required=True)
     
-    def validate_debug_level(self, value):
-        if value not in [level.value for level in DebugType]:
-            raise serializers.ValidationError(
-                f"Invalid debug level. Must be one of: {', '.join([level.value for level in DebugType])}"
-            )
-        return value
+    def validate(self, data):
+        """Validate parameter values based on parameter name"""
+        param_name = data.get('param_name')
+        param_value = data.get('param_value')
+        
+        # Validate debug_level parameter
+        if param_name == AppParameters.PARAM_DEBUG_LEVEL:
+            if param_value not in [level.value for level in DebugType]:
+                raise serializers.ValidationError({
+                    "param_value": f"Invalid debug level. Must be one of: {', '.join([level.value for level in DebugType])}"
+                })
+        
+        return data

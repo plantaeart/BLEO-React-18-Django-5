@@ -231,19 +231,18 @@ DEBUG_LOGS_SCHEMA = {
 APP_PARAMETERS_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["id", "debug_level", "app_version"],
+        "required": ["id", "param_name", "param_value"],
         "properties": {
             "id": {
-                "bsonType": "string",
-                "description": "ID for the app parameters (should be 'app_parameters')"
+                "bsonType": "int",
+                "description": "Unique integer identifier for the parameter"
             },
-            "debug_level": {
-                "enum": ["NO_DEBUG", "DEBUG"],
-                "description": "Debug level setting"
+            "param_name": {
+                "bsonType": "string", 
+                "description": "Parameter name/key"
             },
-            "app_version": {
-                "bsonType": "string",
-                "description": "Application version"
+            "param_value": {
+                "description": "Parameter value (can be any type)"
             }
         }
     }

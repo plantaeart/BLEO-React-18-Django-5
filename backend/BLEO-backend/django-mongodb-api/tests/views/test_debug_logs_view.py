@@ -85,12 +85,19 @@ class DebugLogViewsTest(BLEOBaseTest):
             self.db_logs.delete_many({})
             self.db_params.delete_many({})
             
-            # Create AppParameters document with debug enabled
-            app_params = {
-                'id': 'app_parameters',
-                'debug_level': DebugType.DEBUG.value
+            # Create AppParameters document with debug enabled using the new model structure
+            debug_param = {
+                'param_name': AppParameters.PARAM_DEBUG_LEVEL,
+                'param_value': DebugType.DEBUG.value
             }
-            self.db_params.insert_one(app_params)
+            self.db_params.insert_one(debug_param)
+            
+            # Add version parameter (optional but consistent with the model)
+            version_param = {
+                'param_name': AppParameters.PARAM_APP_VERSION,
+                'param_value': '1.0.0'
+            }
+            self.db_params.insert_one(version_param)
             
             # Create sample test logs
             now = datetime.now()

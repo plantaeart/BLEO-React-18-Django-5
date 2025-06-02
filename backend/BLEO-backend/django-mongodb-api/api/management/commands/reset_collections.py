@@ -59,15 +59,24 @@ class Command(BaseCommand):
                 f"(Version: {APP_VERSION}, Debug Level: {DEBUG_LEVEL})"
             ))
             try:
-                # Create AppParameters with values from AppCurrentState.py
-                app_params = AppParameters(
-                    debug_level=DEBUG_LEVEL,  
-                    app_version=APP_VERSION,
-                )
+                # Create AppParameters with values from AppCurrentState.py using new model structure
+                default_params = [
+                    AppParameters(
+                        id=0,
+                        param_name=AppParameters.PARAM_DEBUG_LEVEL,
+                        param_value=DEBUG_LEVEL
+                    ),
+                    AppParameters(
+                        id=1,
+                        param_name=AppParameters.PARAM_APP_VERSION,
+                        param_value=APP_VERSION
+                    )
+                ]
                 
                 # Insert into collection
-                app_params_collection = db[MongoDB.COLLECTIONS.get('app_parameters', 'AppParameters')]
-                app_params_collection.insert_one(app_params.to_dict())
+                app_params_collection = db[MongoDB.COLLECTIONS['AppParameters']]
+                for param in default_params:
+                    app_params_collection.insert_one(param.to_dict())
                 
                 self.stdout.write(self.style.SUCCESS("AppParameters initialized successfully."))
             except Exception as e:

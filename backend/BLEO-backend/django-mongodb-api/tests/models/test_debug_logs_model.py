@@ -4,8 +4,9 @@ from models.DebugLogs import DebugLogs
 from models.enums.UserType import UserType
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
+from tests.base_test import BLEOBaseTest
 
-class TestDebugLogs(unittest.TestCase):
+class TestDebugLogs(BLEOBaseTest):
     """Test case for the DebugLogs model"""
     
     def test_init_with_required_params(self):

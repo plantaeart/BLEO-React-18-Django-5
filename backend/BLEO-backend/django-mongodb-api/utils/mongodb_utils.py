@@ -104,51 +104,44 @@ class MongoDB:
         # Load current state from config file
         app_state = ConfigManager.get_app_state()
         
-        # If AppParameters doesn't exist, create it with defaults
-        if app_params_collection not in collection_names:
-            print("Creating AppParameters collection with default values")
-            # First create the collection with schema
-            self.setup_collection(app_params_collection, create=True, verbose=True)
-            
-            # Then insert default document from config file
-            default_params = AppParameters(
-                debug_level=app_state['debug_level'],
-                app_version=app_state['app_version'],
+        # First, completely drop the collection if it exists (to ensure clean schema)
+        if app_params_collection in collection_names:
+            print(f"Dropping existing AppParameters collection to update schema")
+            self._db.drop_collection(app_params_collection)
+        
+        # Create collection with new schema
+        print("Creating AppParameters collection with new schema")
+        self.setup_collection(app_params_collection, create=True, verbose=True)
+        
+        # Then insert default parameters with new structure
+        default_params = [
+            AppParameters(
+                id=0,
+                param_name=AppParameters.PARAM_DEBUG_LEVEL,
+                param_value=app_state['debug_level']
+            ),
+            AppParameters(
+                id=1,
+                param_name=AppParameters.PARAM_APP_VERSION, 
+                param_value=app_state['app_version']
             )
-            
-            self._db[app_params_collection].insert_one(default_params.to_dict())
-            print(f"Initialized AppParameters with debug_level={default_params.debug_level} and app_version={default_params.app_version}")
-        else:
-            # Collection exists, check if the default document exists
-            params_doc = self._db[app_params_collection].find_one({"id": "app_parameters"})
-            if not params_doc:
-                # Collection exists but no default document
-                default_params = AppParameters(
-                    debug_level=app_state['debug_level'],
-                    app_version=app_state['app_version'],
-                )
-                
-                self._db[app_params_collection].insert_one(default_params.to_dict())
-                print(f"Added default parameters to existing AppParameters collection")
-            else:
-                # Check if config file is outdated compared to database
-                # If database has newer data, update config file to match
-                if params_doc.get('app_version') != app_state['app_version']:
-                    ConfigManager.update_app_version(params_doc['app_version'])
-                if params_doc.get('debug_level') != app_state['debug_level']:
-                    ConfigManager.update_debug_level(params_doc['debug_level'])
-
+        ]
+        
+        for param in default_params:
+            self._db[app_params_collection].insert_one(param.to_dict())
+    
+        print(f"Initialized AppParameters with new model structure")
     def check_app_version(self):
         """Check app version and handle updates if needed"""
         app_params_collection = self.COLLECTIONS['AppParameters']
-        params_doc = self._db[app_params_collection].find_one({"id": "app_parameters"})
+        version_param = self._db[app_params_collection].find_one({"param_name": AppParameters.PARAM_APP_VERSION})
         
-        if not params_doc:
-            print("Warning: AppParameters document not found, initializing...")
+        if not version_param:
+            print("Warning: App version parameter not found, initializing...")
             self._initialize_app_parameters()
             return
         
-        current_version = params_doc.get("app_version", "1.0.0")
+        current_version = version_param.get("param_value", "1.0.0")
         print(f"Current database app version: {current_version}")
         
         # Here's where you can implement version-based migrations
@@ -167,8 +160,8 @@ class MongoDB:
         """Update the app version in both the database and config file"""
         app_params_collection = self.COLLECTIONS['AppParameters']
         result = self._db[app_params_collection].update_one(
-            {"id": "app_parameters"},
-            {"$set": {"app_version": new_version}}
+            {"param_name": AppParameters.PARAM_APP_VERSION},
+            {"$set": {"param_value": new_version}}
         )
         
         # Also update the config file
@@ -379,3 +372,18 @@ class MongoDB:
         
         # Finally, update the version
         self.update_app_version("1.3.0")
+    
+    def _get_next_param_id(self):
+        """Get next parameter ID using max(id) + 1"""
+        try:
+            db = self._db[self.COLLECTIONS['AppParameters']]
+            # Find the document with the highest ID
+            result = db.find_one(sort=[("id", -1)])
+            
+            if result and "id" in result:
+                return result["id"] + 1
+            else:
+                return 0
+        except Exception as e:
+            print(f"Error getting next parameter ID: {str(e)}")
+            return 0

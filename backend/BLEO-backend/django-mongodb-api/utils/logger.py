@@ -6,6 +6,7 @@ from models.enums.ErrorSourceType import ErrorSourceType
 from models.enums.DebugType import DebugType
 import traceback
 from datetime import datetime
+from models.AppParameters import AppParameters
 
 class Logger:
     """Utility class for logging actions to MongoDB"""
@@ -15,13 +16,13 @@ class Logger:
         """Check if debug logging is enabled in AppParameters"""
         try:
             db = MongoDB.get_instance().get_collection('AppParameters')
-            params = db.find_one({"id": "app_parameters"})
+            debug_param = db.find_one({"param_name": AppParameters.PARAM_DEBUG_LEVEL})
             
             # Default to logging unless explicitly set to NO_DEBUG
-            if not params:
+            if not debug_param:
                 return True
                 
-            return params.get('debug_level') == DebugType.DEBUG.value
+            return debug_param.get('param_value') == DebugType.DEBUG.value
         except Exception as e:
             # If there's an error checking debug status, default to logging
             print(f"Error checking debug status: {str(e)}")

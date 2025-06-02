@@ -5,32 +5,39 @@ class AppParameters:
     """
     Model for application parameters
     
-    Contains global settings for the application like debug level and version
+    Each parameter is stored as a separate record with:
+    - id: Unique integer identifier 
+    - param_name: Parameter name/key
+    - param_value: Parameter value (can be any type)
     """
     
     def __init__(
         self,
-        debug_level: str = DebugType.DEBUG.value,
-        app_version: str = "1.0.0",
-        id: str = "app_parameters"
+        param_name: str,
+        param_value: Any,
+        id: int = None
     ):
         self.id = id
-        self.debug_level = debug_level
-        self.app_version = app_version
+        self.param_name = param_name
+        self.param_value = param_value
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert object to dictionary for DB storage"""
         return {
             "id": self.id,
-            "debug_level": self.debug_level,
-            "app_version": self.app_version,
+            "param_name": self.param_name,
+            "param_value": self.param_value
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AppParameters':
         """Create object from dictionary"""
         return cls(
-            id=data.get("id", "app_parameters"),
-            debug_level=data.get("debug_level", DebugType.DEBUG.value),
-            app_version=data.get("app_version", "1.0.0"),
+            id=data.get("id"),
+            param_name=data.get("param_name"),
+            param_value=data.get("param_value")
         )
+    
+    # Common parameter names - constants for consistency
+    PARAM_DEBUG_LEVEL = "debug_level"
+    PARAM_APP_VERSION = "app_version"
