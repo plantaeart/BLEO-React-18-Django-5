@@ -150,7 +150,7 @@ class TestSummaryFormatter:
     
     @staticmethod
     def _show_failure_details(test_results):
-        """Show detailed failure information"""
+        """Show detailed failure information with line numbers"""
         if test_results.failures:
             print(f"\n❌ ASSERTION FAILURES ({len(test_results.failures)}):")
             for i, failure in enumerate(test_results.failures, 1):
@@ -158,17 +158,40 @@ class TestSummaryFormatter:
                 test_class = failure[0].__class__.__name__
                 print(f"   {i}. {ColoredOutput.red(f'{test_class}.{test_name}')}")
                 
-                # Extract error message
+                # Extract error message and line information
                 error_lines = failure[1].split('\n')
+                
+                # Find the file and line number
+                file_line_info = None
+                assertion_error = None
+                
                 for line in error_lines:
+                    # Look for file and line information
+                    if 'File "' in line and 'line ' in line:
+                        # Extract file path and line number
+                        try:
+                            file_part = line.split('File "')[1].split('"')[0]
+                            line_part = line.split('line ')[1].split(',')[0]
+                            # Get just the filename, not the full path
+                            filename = file_part.split('\\')[-1].split('/')[-1]
+                            file_line_info = f"{filename}:{line_part}"
+                        except:
+                            pass
+                    
+                    # Look for AssertionError
                     if "AssertionError" in line:
-                        clean_error = line.strip().replace("AssertionError: ", "")
-                        print(f"      💥 {ColoredOutput.yellow(clean_error)}")
-                        break
+                        assertion_error = line.strip().replace("AssertionError: ", "")
+                
+                # Display the information
+                if file_line_info:
+                    print(f"      📍 {ColoredOutput.cyan(f'Location: {file_line_info}')}")
+                
+                if assertion_error:
+                    print(f"      💥 {ColoredOutput.yellow(assertion_error)}")
                 else:
                     # If no AssertionError line found, show the last meaningful line
                     for line in reversed(error_lines):
-                        if line.strip() and not line.strip().startswith('File'):
+                        if line.strip() and not line.strip().startswith('File') and not line.strip().startswith('    '):
                             print(f"      💥 {ColoredOutput.yellow(line.strip())}")
                             break
         
@@ -179,17 +202,38 @@ class TestSummaryFormatter:
                 test_class = error[0].__class__.__name__
                 print(f"   {i}. {ColoredOutput.red(f'{test_class}.{test_name}')}")
                 
-                # Extract error message
+                # Extract error message and line information
                 error_lines = error[1].split('\n')
+                
+                # Find the file and line number
+                file_line_info = None
+                runtime_error = None
+                
                 for line in error_lines:
+                    # Look for file and line information
+                    if 'File "' in line and 'line ' in line:
+                        try:
+                            file_part = line.split('File "')[1].split('"')[0]
+                            line_part = line.split('line ')[1].split(',')[0]
+                            filename = file_part.split('\\')[-1].split('/')[-1]
+                            file_line_info = f"{filename}:{line_part}"
+                        except:
+                            pass
+                    
+                    # Look for runtime errors
                     if any(keyword in line for keyword in ["Error:", "Exception:", "ImportError:", "ModuleNotFoundError:"]):
-                        clean_error = line.strip()
-                        print(f"      🔥 {ColoredOutput.yellow(clean_error)}")
-                        break
+                        runtime_error = line.strip()
+                
+                # Display the information
+                if file_line_info:
+                    print(f"      📍 {ColoredOutput.cyan(f'Location: {file_line_info}')}")
+                
+                if runtime_error:
+                    print(f"      🔥 {ColoredOutput.yellow(runtime_error)}")
                 else:
                     # If no specific error line found, show the last meaningful line
                     for line in reversed(error_lines):
-                        if line.strip() and not line.strip().startswith('File'):
+                        if line.strip() and not line.strip().startswith('File') and not line.strip().startswith('    '):
                             print(f"      🔥 {ColoredOutput.yellow(line.strip())}")
                             break
 

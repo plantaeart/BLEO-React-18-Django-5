@@ -12,6 +12,7 @@ from models.enums.ErrorSourceType import ErrorSourceType
 import os
 from dotenv import load_dotenv
 from utils.jwt_utils import setup_jwt_secret
+import uuid
 
 load_dotenv()
 
@@ -99,17 +100,25 @@ class CustomTokenObtainPairView(APIView):
             
             bleoid = user['BLEOId']
             
-            # Create tokens with fixed datetime usage
+            # Create tokens with proper timestamp handling
+            now = datetime.now(timezone.utc)
+            # Subtract 1 second to ensure iat is in the past
+            issued_at = now - timedelta(seconds=1)
+            
             access_payload = {
                 'bleoid': bleoid,
                 'email': user['email'],
-                'exp': datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE)
+                'jti': str(uuid.uuid4()),  # JWT ID for uniqueness
+                'iat': int(issued_at.timestamp()),  # Issued at (in the past)
+                'exp': int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE)).timestamp())
             }
             
             refresh_payload = {
                 'bleoid': bleoid,
                 'email': user['email'],
-                'exp': datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE)
+                'jti': str(uuid.uuid4()),  # JWT ID for uniqueness
+                'iat': int(issued_at.timestamp()),  # Issued at (in the past)
+                'exp': int((now + timedelta(days=REFRESH_TOKEN_EXPIRE)).timestamp())
             }
             
             access_token = jwt.encode(access_payload, JWT_SECRET, algorithm='HS256')
@@ -173,10 +182,22 @@ class CustomTokenObtainPairView(APIView):
             username = parts[0]
             domain = parts[1]
             
-            if len(username) <= 3:
-                masked_username = username[0] + '*' * (len(username) - 1)
+            # Handle different username lengths
+            if len(username) == 1:
+                # Single character: don't mask
+                masked_username = username
+            elif len(username) == 2:
+                # Two characters: mask second character
+                masked_username = username[0] + '*'
+            elif len(username) == 3:
+                # Three characters: first + asterisk + last
+                masked_username = username[0] + '*' + username[-1]
+            elif len(username) == 4:
+                # Four characters: first two + asterisk + last
+                masked_username = username[0:2] + '*' + username[-1]
             else:
-                masked_username = username[0:2] + '*' * (len(username) - 3) + username[-1]
+                # Five or more characters: first two + two asterisks + last
+                masked_username = username[0:2] + '**' + username[-1]
                 
             return f"{masked_username}@{domain}"
         except:
@@ -214,7 +235,6 @@ class TokenRefreshView(APIView):
             try:
                 payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=['HS256'])
                 
-                # Get bleoid and email for logging
                 bleoid = payload.get('bleoid')
                 email = payload.get('email')
                 masked_email = self._mask_email(email) if email else "unknown-email"
@@ -266,11 +286,17 @@ class TokenRefreshView(APIView):
                     message="Invalid refresh token"
                 ).to_response(status.HTTP_401_UNAUTHORIZED)
             
-            # Create new access token with fixed datetime usage
+            # Create new access token with proper timestamp handling
+            now = datetime.now(timezone.utc)
+            # Subtract 1 second to ensure iat is in the past
+            issued_at = now - timedelta(seconds=1)
+            
             access_payload = {
                 'bleoid': payload['bleoid'],
                 'email': payload['email'],
-                'exp': datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE)
+                'jti': str(uuid.uuid4()),  # JWT ID for uniqueness
+                'iat': int(issued_at.timestamp()),  # Issued at (in the past)
+                'exp': int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE)).timestamp())
             }
             
             new_access_token = jwt.encode(access_payload, JWT_SECRET, algorithm='HS256')
@@ -313,10 +339,22 @@ class TokenRefreshView(APIView):
             username = parts[0]
             domain = parts[1]
             
-            if len(username) <= 3:
-                masked_username = username[0] + '*' * (len(username) - 1)
+            # Handle different username lengths
+            if len(username) == 1:
+                # Single character: don't mask
+                masked_username = username
+            elif len(username) == 2:
+                # Two characters: mask second character
+                masked_username = username[0] + '*'
+            elif len(username) == 3:
+                # Three characters: first + asterisk + last
+                masked_username = username[0] + '*' + username[-1]
+            elif len(username) == 4:
+                # Four characters: first two + asterisk + last
+                masked_username = username[0:2] + '*' + username[-1]
             else:
-                masked_username = username[0:2] + '*' * (len(username) - 3) + username[-1]
+                # Five or more characters: first two + two asterisks + last
+                masked_username = username[0:2] + '**' + username[-1]
                 
             return f"{masked_username}@{domain}"
         except:
