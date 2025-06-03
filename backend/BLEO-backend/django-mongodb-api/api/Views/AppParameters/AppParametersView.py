@@ -138,3 +138,261 @@ class AppParametersView(APIView):
             return BLEOResponse.server_error(
                 message=f"Failed to update application parameter: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        """Create new application parameter"""
+        try:
+            # Get data from request
+            param_name = request.data.get('param_name')
+            param_value = request.data.get('param_value')
+            
+            # Validate required fields
+            if not param_name:
+                return BLEOResponse.validation_error(
+                    message="Parameter name is required",
+                    errors={"param_name": "This field is required"}
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+                
+            if param_value is None:
+                return BLEOResponse.validation_error(
+                    message="Parameter value is required", 
+                    errors={"param_value": "This field is required"}
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+            
+            db = MongoDB.get_instance().get_collection('AppParameters')
+            
+            # Check if parameter already exists
+            existing = db.find_one({"param_name": param_name})
+            if existing:
+                return BLEOResponse.validation_error(
+                    message=f"Parameter {param_name} already exists",
+                    errors={f"Parameter {param_name} already exists"},
+                ).to_response(status.HTTP_409_CONFLICT)
+            
+            # Create new parameter
+            # Get next available ID
+            next_id = 0
+            highest_id = db.find_one(sort=[("id", -1)])
+            if highest_id and "id" in highest_id:
+                next_id = highest_id["id"] + 1
+            
+            # Create new parameter object
+            new_param = AppParameters(
+                id=next_id,
+                param_name=param_name,
+                param_value=param_value
+            )
+            
+            # Insert into database
+            db.insert_one(new_param.to_dict())
+            
+            # Get the created parameter
+            created_param = db.find_one({"param_name": param_name})
+            if "_id" in created_param:
+                created_param["_id"] = str(created_param["_id"])
+            
+            # Special handling for specific parameters
+            if param_name == AppParameters.PARAM_DEBUG_LEVEL:
+                # Validate debug level value
+                from models.enums.DebugType import DebugType
+                valid_debug_values = [e.value for e in DebugType]
+                if param_value not in valid_debug_values:
+                    return BLEOResponse.validation_error(
+                        message=f"Invalid debug level value: {param_value}",
+                        errors={"param_value": f"Must be one of: {', '.join(valid_debug_values)}"}
+                    ).to_response(status.HTTP_400_BAD_REQUEST)
+                    
+                # Update config file
+                from utils.config_manager import ConfigManager
+                ConfigManager.update_debug_level(param_value)
+                    
+            elif param_name == AppParameters.PARAM_APP_VERSION:
+                # Update config file
+                from utils.config_manager import ConfigManager
+                ConfigManager.update_app_version(param_value)
+            
+            # Log the creation
+            Logger.system_action(
+                f"Application parameter created: {param_name}={param_value}",
+                LogType.INFO.value,
+                201
+            )
+            
+            return BLEOResponse.success(
+                data=created_param,
+                message=f"Parameter {param_name} created successfully",
+            ).to_response(status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            Logger.server_error(f"Failed to create app parameter: {str(e)}")
+            return BLEOResponse.server_error(
+                message=f"Failed to create application parameter: {str(e)}"
+            ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AppParameterDetailView(APIView):
+    """API view for managing specific application parameters by name"""
+    
+    def get(self, request, param_name):
+        """Get specific parameter by name"""
+        try:
+            db = MongoDB.get_instance().get_collection('AppParameters')
+            
+            # Get parameter by name
+            param = db.find_one({"param_name": param_name})
+            
+            if not param:
+                return BLEOResponse.not_found(
+                    message=f"Parameter {param_name} not found"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Convert ObjectId to string
+            if "_id" in param:
+                param["_id"] = str(param["_id"])
+            
+            return BLEOResponse.success(
+                data=param,
+                message=f"Parameter {param_name} retrieved successfully"
+            ).to_response()
+            
+        except Exception as e:
+            Logger.server_error(f"Failed to retrieve parameter {param_name}: {str(e)}")
+            return BLEOResponse.server_error(
+                message=f"Failed to retrieve parameter: {str(e)}"
+            ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def put(self, request, param_name):
+        """Update specific parameter by name"""
+        try:
+            # Log request data for debugging
+            Logger.system_action(
+                f"Attempting to update parameter {param_name} with data: {request.data}",
+                LogType.INFO.value,
+                200
+            )
+            
+            # Extract param_value from request data
+            param_value = request.data.get('param_value')
+            
+            if param_value is None:
+                return BLEOResponse.validation_error(
+                    message="Parameter value is required",
+                    errors={"param_value": "This field is required"}
+                ).to_response(status.HTTP_400_BAD_REQUEST)
+            
+            db = MongoDB.get_instance().get_collection('AppParameters')
+            
+            # Check if parameter exists
+            existing = db.find_one({"param_name": param_name})
+            
+            if not existing:
+                return BLEOResponse.not_found(
+                    message=f"Parameter {param_name} not found"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Special validation for specific parameters
+            if param_name == AppParameters.PARAM_DEBUG_LEVEL:
+                # Validate debug level value
+                from models.enums.DebugType import DebugType
+                valid_debug_values = [e.value for e in DebugType]
+                if param_value not in valid_debug_values:
+                    return BLEOResponse.validation_error(
+                        message=f"Invalid debug level value: {param_value}",
+                        errors={"param_value": f"Must be one of: {', '.join(valid_debug_values)}"}
+                    ).to_response(status.HTTP_400_BAD_REQUEST)
+            
+            # Update parameter
+            result = db.update_one(
+                {"param_name": param_name}, 
+                {"$set": {"param_value": param_value}}
+            )
+
+            print(f"Update result: matched={result.matched_count}, modified={result.modified_count}")
+            
+            Logger.system_action(
+                f"Update result: matched={result.matched_count}, modified={result.modified_count}",
+                LogType.INFO.value,
+                200
+            )
+            
+            if result.matched_count == 0:
+                return BLEOResponse.not_found(
+                    message=f"Parameter {param_name} not found during update"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+                
+            if result.modified_count == 0:
+                return BLEOResponse.success(
+                    message=f"No changes made to parameter {param_name}, value already set to {param_value}"
+                ).to_response(status.HTTP_200_OK)
+            
+            # Get and return updated parameter
+            updated_param = db.find_one({"param_name": param_name})
+            
+            if not updated_param:
+                Logger.server_error(f"Parameter {param_name} not found after update")
+                return BLEOResponse.server_error(
+                    message=f"Parameter updated but could not be retrieved"
+                ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            if "_id" in updated_param:
+                updated_param["_id"] = str(updated_param["_id"])
+            
+            # Special handling for specific parameters
+            if param_name == AppParameters.PARAM_DEBUG_LEVEL:
+                # Update config file
+                from utils.config_manager import ConfigManager
+                ConfigManager.update_debug_level(param_value)
+            elif param_name == AppParameters.PARAM_APP_VERSION:
+                # Update config file
+                from utils.config_manager import ConfigManager
+                ConfigManager.update_app_version(param_value)
+            
+            # Log the update
+            Logger.system_action(
+                f"Application parameter updated: {param_name}={param_value}",
+                LogType.INFO.value,
+                200
+            )
+            
+            return BLEOResponse.success(
+                data=updated_param,
+                message=f"Parameter {param_name} updated successfully",
+            ).to_response()
+            
+        except Exception as e:
+            Logger.server_error(f"Failed to update parameter {param_name}: {str(e)}")
+            return BLEOResponse.server_error(
+                message=f"Failed to update parameter: {str(e)}"
+            ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete(self, request, param_name):
+        """Delete specific parameter by name"""
+        try:
+            db = MongoDB.get_instance().get_collection('AppParameters')
+            
+            # Check if parameter exists
+            existing = db.find_one({"param_name": param_name})
+            
+            if not existing:
+                return BLEOResponse.not_found(
+                    message=f"Parameter {param_name} not found",
+                ).to_response(status.HTTP_404_NOT_FOUND)
+            
+            # Delete parameter
+            db.delete_one({"param_name": param_name})
+            
+            # Log the deletion
+            Logger.system_action(
+                f"Application parameter deleted: {param_name}",
+                LogType.INFO.value,
+                200
+            )
+            
+            return BLEOResponse.success(
+                message=f"Parameter {param_name} deleted successfully"
+            ).to_response(status.HTTP_204_NO_CONTENT)
+            
+        except Exception as e:
+            Logger.server_error(f"Failed to delete parameter {param_name}: {str(e)}")
+            return BLEOResponse.server_error(
+                message=f"Failed to delete parameter: {str(e)}"
+            ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)

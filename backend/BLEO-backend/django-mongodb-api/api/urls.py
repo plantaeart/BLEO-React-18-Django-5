@@ -12,7 +12,7 @@ from auth.email_verification import EmailVerificationView
 from auth.connection import ConnectionRequestView, ConnectionResponseView, ConnectionListView
 from auth.token_validation import TokenValidationView
 from api.Views.DebugLogs.DebugLogViews import LoggingView, AdminLogsView, AdminLogDetailView
-from api.Views.AppParameters.AppParametersView import AppParametersView
+from api.Views.AppParameters.AppParametersView import AppParametersView, AppParameterDetailView
 
 urlpatterns = [
     # User CRUD endpoints
@@ -74,6 +74,7 @@ urlpatterns += [
 ]
 
 urlpatterns += [
-    # App Parameters endpoint
+    # App Parameters endpoints
     path('app-parameters/', AppParametersView.as_view(), name='app-parameters'),
+    path('app-parameters/<str:param_name>/', AppParameterDetailView.as_view(), name='app-parameter-detail'),
 ]

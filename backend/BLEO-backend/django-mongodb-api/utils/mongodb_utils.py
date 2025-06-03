@@ -1,4 +1,3 @@
-from utils.config_manager import ConfigManager
 from models.enums.DebugType import DebugType
 from models.AppParameters import AppParameters
 import os
@@ -23,6 +22,7 @@ class MongoDB:
     _instance = None
     _client = None
     _db = None
+    _initialized = False  # Track if system has been initialized
     
     # Collection mapping dictionary
     COLLECTIONS = {
@@ -36,20 +36,32 @@ class MongoDB:
     }
     
     @classmethod
+    def initialize(cls):
+        """Initialize MongoDB once at server startup"""
+        if cls._initialized:
+            print("ℹ️ MongoDB system already initialized, skipping...")
+            return cls._instance
+            
+        print("🚀 Initializing MongoDB system at server startup...")
+        instance = cls.get_instance()
+        
+        instance.initialize_system()
+        cls._initialized = True
+        print("✅ MongoDB system initialization complete!")
+        
+        return instance
+    
+    @classmethod
     def get_instance(cls):
+        """Get or create MongoDB instance (connection only)"""
         if cls._instance is None:
             cls._instance = MongoDB()
         return cls._instance
     
-    @classmethod
-    def get_client(cls):
-        if cls._instance is None:
-            cls._instance = MongoDB()
-        return cls._instance._client
-
     def __init__(self):
-        # Get MongoDB connection details from environment variables
+        """Initialize MongoDB connection only (not the collections/parameters)"""
         try:
+            # Get MongoDB connection details from environment variables
             env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
             env.read_env(env_path)
             
@@ -57,7 +69,7 @@ class MongoDB:
             mongo_password = env.str('MONGO_PASSWORD')
             db_name = env.str('MONGO_DB_NAME')
             
-            print(f"Using MongoDB URI: {mongo_uri.replace(mongo_password, '***')}")
+            print(f"Connecting to MongoDB: {mongo_uri.replace(mongo_password, '***')}")
             
             # Insert password into connection string if placeholder exists
             if '{password}' in mongo_uri:
@@ -69,321 +81,190 @@ class MongoDB:
             
             # Test connection
             self._client.admin.command('ping')
-            print("MongoDB connection successful!")
-            
-            # Initialize collections with schema validation
-            self._initialize_collections()
-            
-            # Check app version and run any necessary migrations
-            self.check_app_version()
+            print("✅ MongoDB connection successful!")
 
         except Exception as e:
-            print(f"MongoDB connection error: {str(e)}")
+            print(f"❌ MongoDB connection error: {str(e)}")
             raise
 
-    def _initialize_collections(self):
-        """Initialize MongoDB collections with schema validation"""
-        # First check if AppParameters exists, and if not, create it with defaults
-        self._initialize_app_parameters()
+    def initialize_system(self):
+        """Initialize collections and handle version updates (called only once)"""
+        print("🔧 Initializing MongoDB collections and parameters...")
         
-        # Now proceed with other collections as normal
-        collection_names = self._db.list_collection_names()
+        # Step 1: Check/Create all collections with schemas
+        self._ensure_collections_exist()
         
-        # Initialize each collection if it doesn't exist
-        for collection in self.COLLECTIONS.values():
-            if collection not in collection_names:
-                self.setup_collection(collection, create=True)
-            else:
-                self.setup_collection(collection, create=False)
-
-    def _initialize_app_parameters(self):
-        """Initialize AppParameters collection with default values from config"""
-        collection_names = self._db.list_collection_names()
-        app_params_collection = self.COLLECTIONS['AppParameters']
+        # Step 2: Handle version updates (including AppParameters)
+        self._handle_version_updates()
         
-        # Load current state from config file
-        app_state = ConfigManager.get_app_state()
-        
-        # First, completely drop the collection if it exists (to ensure clean schema)
-        if app_params_collection in collection_names:
-            print(f"Dropping existing AppParameters collection to update schema")
-            self._db.drop_collection(app_params_collection)
-        
-        # Create collection with new schema
-        print("Creating AppParameters collection with new schema")
-        self.setup_collection(app_params_collection, create=True, verbose=True)
-        
-        # Then insert default parameters with new structure
-        default_params = [
-            AppParameters(
-                id=0,
-                param_name=AppParameters.PARAM_DEBUG_LEVEL,
-                param_value=app_state['debug_level']
-            ),
-            AppParameters(
-                id=1,
-                param_name=AppParameters.PARAM_APP_VERSION, 
-                param_value=app_state['app_version']
-            )
-        ]
-        
-        for param in default_params:
-            self._db[app_params_collection].insert_one(param.to_dict())
+        print("✅ MongoDB system setup complete!")
     
-        print(f"Initialized AppParameters with new model structure")
-    def check_app_version(self):
-        """Check app version and handle updates if needed"""
-        app_params_collection = self.COLLECTIONS['AppParameters']
-        version_param = self._db[app_params_collection].find_one({"param_name": AppParameters.PARAM_APP_VERSION})
+    def _ensure_collections_exist(self):
+        """Check if collections exist, create/update them with proper schemas"""
+        print("📋 Checking collections...")
+        collection_names = self._db.list_collection_names()
         
-        if not version_param:
-            print("Warning: App version parameter not found, initializing...")
-            self._initialize_app_parameters()
-            return
-        
-        current_version = version_param.get("param_value", "1.0.0")
-        print(f"Current database app version: {current_version}")
-        
-        # Here's where you can implement version-based migrations
-        # For example:
-        if current_version == "1.0.0":
-            # No migration needed for initial version
-            pass
-        elif current_version == "1.1.0":
-            # Migrate from 1.1.0 to newer version
-            self._migrate_from_1_1_0()
-        elif current_version == "1.2.0":
-            # Migrate from 1.2.0 to newer version
-            self._migrate_from_1_2_0()
-
-    def update_app_version(self, new_version):
-        """Update the app version in both the database and config file"""
-        app_params_collection = self.COLLECTIONS['AppParameters']
-        result = self._db[app_params_collection].update_one(
-            {"param_name": AppParameters.PARAM_APP_VERSION},
-            {"$set": {"param_value": new_version}}
-        )
-        
-        # Also update the config file
-        ConfigManager.update_app_version(new_version)
-        
-        if result.modified_count > 0:
-            print(f"Updated app version to {new_version}")
-        else:
-            print(f"Failed to update app version")
-            
-        return result.modified_count > 0
-
-    def recreate_collection(self, collection_name):
-        """Drop and recreate a collection"""
-        if collection_name not in self.COLLECTIONS.values():
-            print(f"Warning: {collection_name} is not in the recognized collections list")
-            return False
-        
+        for collection_key, collection_name in self.COLLECTIONS.items():
+            if collection_name not in collection_names:
+                print(f"  📝 Creating collection: {collection_name}")
+                self.setup_collection(collection_name, create=True)
+            else:
+                print(f"  🔄 Updating schema for existing collection: {collection_name}")
+                self.setup_collection(collection_name, create=False)
+    
+    def _handle_version_updates(self):
+        """Handle version-based parameter updates"""
         try:
-            print(f"Dropping collection: {collection_name}")
-            self._db.drop_collection(collection_name)
-            
-            print(f"Recreating collection: {collection_name}")
-            self.setup_collection(collection_name, create=True, verbose=True)
-            
-            # Update the AppParameters to track recreation
+            print("🔢 Checking application version...")
             app_params_collection = self.COLLECTIONS['AppParameters']
-
-            # Update the document
-            self._db[app_params_collection].update_one(
-                {"id": "app_parameters"},
-            )
+            version_param = self._db[app_params_collection].find_one({"param_name": AppParameters.PARAM_APP_VERSION})
             
-            return True
-        except Exception as e:
-            print(f"Error recreating collection {collection_name}: {str(e)}")
-            return False
-
-    def _ensure_index(self, collection, index_spec, unique=False, name=None, **kwargs):
-        """Safely create an index if it doesn't exist or matches existing definition"""
-        try:
-            collection.create_index(index_spec, unique=unique, name=name, **kwargs)
-        except Exception as e:
-            # If index already exists with different options, drop and recreate it
-            if "already exists with different options" in str(e) or "IndexKeySpecsConflict" in str(e):
-                # Find the existing index name
-                for idx in collection.list_indexes():
-                    key_items = list(idx['key'].items())
-                    index_spec_items = [(field[0], field[1]) for field in index_spec]
-                    if key_items == index_spec_items:
-                        idx_name = idx['name']
-                        print(f"Dropping existing index {idx_name} with different options")
-                        collection.drop_index(idx_name)
-                        collection.create_index(index_spec, unique=unique, name=name, **kwargs)
-                        return
+            if not version_param:
+                print("  ⚠️ No version found, starting with version 1.0.0...")
+                current_version = "1.0.0"
             else:
-                print(f"Error creating index: {e}")
-
-    def get_db(self):
-        return self._db
+                current_version = version_param.get("param_value", "1.0.0")
+                print(f"  📊 Current database version: {current_version}")
+            
+            # Run version updates starting from 1.0.0
+            versions_to_run = ["1.0.0"]  # Add future versions here: ["1.0.0", "1.1.0", "1.2.0"]
+            
+            for version in versions_to_run:
+                if self._should_run_version(current_version, version):
+                    self._run_version_update(version)
+                    
+        except Exception as e:
+            print(f"❌ Error handling version updates: {str(e)}")
     
-    def get_collection(self, collection_name):
-        # Use the COLLECTIONS dictionary to get the actual collection name
-        actual_collection = self.COLLECTIONS.get(collection_name, collection_name)
-        return self._db[actual_collection]
+    def _should_run_version(self, current_version, target_version):
+        """Determine if we should run a version update"""
+        # For now, always run 1.0.0 to ensure base parameters exist
+        if target_version == "1.0.0":
+            return True
+        # Add logic for future versions
+        return False
     
-    def setup_collection(self, collection_name, create=False, verbose=False):
-        """
-        Set up a MongoDB collection with proper schema validation and indexes
-        
-        Args:
-            collection_name: Name of the collection to set up
-            create: Whether to create the collection if it doesn't exist
-            verbose: Whether to print verbose information about the setup
-        """
+    def _run_version_update(self, version):
+        """Run the update script for a specific version"""
         try:
-            # Get the schema for this collection based on the name
-            schema_map = {
-                'Users': USER_SCHEMA,
-                'Links': LINK_SCHEMA,
-                'MessagesDays': MESSAGE_DAY_SCHEMA,
-                'PasswordResets': PASSWORD_RESET_SCHEMA,
-                'TokenBlacklist': TOKEN_BLACKLIST_SCHEMA,
-                'DebugLogs': DEBUG_LOGS_SCHEMA,
-                'AppParameters': APP_PARAMETERS_SCHEMA
+            print(f"  🚀 Running version {version} updates...")
+            
+            if version == '1.0.0':
+                from mongoDbVersionUpdate.v1_0_0.v1_0_0_AppParameters import update_app_parameters
+                result = update_app_parameters()
+                
+                if result["success"]:
+                    print(f"    ✅ {result['message']}")
+                    print(f"    📊 Created: {result['created']}, Updated: {result['updated']}")
+                else:
+                    print(f"    ❌ {result['message']}: {result.get('error', 'Unknown error')}")
+            else:
+                print(f"    ⚠️ No update module found for version {version}")
+                
+        except ImportError as e:
+            print(f"    ❌ Could not import update module for version {version}: {str(e)}")
+        except Exception as e:
+            print(f"    ❌ Error running version {version} update: {str(e)}")
+
+    def setup_collection(self, collection_name, create=False, verbose=False):
+        """Setup MongoDB collection with schema validation"""
+        try:
+            # Map collection name to schema
+            schema_mapping = {
+                self.COLLECTIONS['Users']: USER_SCHEMA,
+                self.COLLECTIONS['Links']: LINK_SCHEMA,
+                self.COLLECTIONS['MessagesDays']: MESSAGE_DAY_SCHEMA,
+                self.COLLECTIONS['PasswordResets']: PASSWORD_RESET_SCHEMA,
+                self.COLLECTIONS['TokenBlacklist']: TOKEN_BLACKLIST_SCHEMA,
+                self.COLLECTIONS['DebugLogs']: DEBUG_LOGS_SCHEMA,
+                self.COLLECTIONS['AppParameters']: APP_PARAMETERS_SCHEMA
             }
             
-            schema = schema_map.get(collection_name)
-            if not schema:
+            if collection_name not in schema_mapping:
                 if verbose:
-                    print(f"Warning: No schema defined for collection {collection_name}")
+                    print(f"Warning: No schema found for collection {collection_name}")
                 return
             
-            # Create collection with validation if it doesn't exist and create=True
+            schema = schema_mapping[collection_name]
+            
             if create:
-                if verbose:
-                    print(f"Creating collection {collection_name} with schema validation")
+                # Drop collection if it exists
+                if collection_name in self._db.list_collection_names():
+                    if verbose:
+                        print(f"Dropping existing collection: {collection_name}")
+                    self._db.drop_collection(collection_name)
                 
-                try:
-                    self._db.create_collection(collection_name, validator=schema)
-                except Exception as e:
-                    if "already exists" in str(e):
-                        if verbose:
-                            print(f"Collection {collection_name} already exists, updating schema")
-                        # Update validation for existing collection
-                        self._db.command({
-                            'collMod': collection_name,
-                            'validator': schema,
-                            'validationLevel': 'moderate'  # 'strict' or 'moderate'
-                        })
-                    else:
-                        raise
-            else:
-                # Just update validation for existing collection
+                # Create collection with validation
                 if verbose:
-                    print(f"Updating schema validation for collection {collection_name}")
+                    print(f"Creating collection with schema: {collection_name}")
+                
+                self._db.create_collection(
+                    collection_name,
+                    validator=schema,
+                    validationLevel="strict"
+                )
+                
+                # Set up indexes
+                self._setup_collection_indexes(collection_name)
+                
+                if verbose:
+                    print(f"✅ Collection created: {collection_name}")
+            else:
+                # Just update the schema without dropping
                 try:
                     self._db.command({
-                        'collMod': collection_name,
-                        'validator': schema,
-                        'validationLevel': 'moderate'  # 'strict' or 'moderate'
+                        "collMod": collection_name,
+                        "validator": schema,
+                        "validationLevel": "moderate"
                     })
+                    if verbose:
+                        print(f"✅ Schema updated for collection: {collection_name}")
                 except Exception as e:
-                    if "not found" in str(e) and create:
-                        # Collection doesn't exist but create=True, so create it
-                        self._db.create_collection(collection_name, validator=schema)
-                    elif "not found" in str(e):
-                        if verbose:
-                            print(f"Collection {collection_name} not found and create=False")
-                    else:
-                        raise
-            
-            # Set up indexes based on collection
-            collection = self._db[collection_name]
-            
-            if collection_name == 'Users':
-                # Create unique indexes for Users collection
-                self._ensure_index(collection, [('email', ASCENDING)], unique=True)
-                self._ensure_index(collection, [('BLEOId', ASCENDING)], unique=True)
-                if verbose:
-                    print(f"Created unique indexes on email and BLEOId for Users collection")
-                    
-            elif collection_name == 'Links':
-                # Create indexes for Links collection
-                self._ensure_index(collection, [('BLEOIdPartner1', ASCENDING)])
-                self._ensure_index(collection, [('BLEOIdPartner2', ASCENDING)])
-                self._ensure_index(collection, [('status', ASCENDING)])
-                if verbose:
-                    print(f"Created indexes on BLEOIdPartner1, BLEOIdPartner2, and status for Links collection")
-                    
-            elif collection_name == 'MessagesDays':
-                # Create indexes for MessagesDays collection
-                self._ensure_index(collection, [('fromBLEOId', ASCENDING)])
-                self._ensure_index(collection, [('toBLEOId', ASCENDING)])
-                self._ensure_index(collection, [('date', ASCENDING)])
-                self._ensure_index(collection, [('fromBLEOId', ASCENDING), ('date', ASCENDING)], unique=True)
-                if verbose:
-                    print(f"Created indexes on fromBLEOId, toBLEOId, and date for MessagesDays collection")
-                    
-            elif collection_name == 'PasswordResets':
-                # Create indexes for PasswordResets collection
-                self._ensure_index(collection, [('email', ASCENDING)])
-                self._ensure_index(collection, [('token', ASCENDING)], unique=True)
-                self._ensure_index(collection, [('expires', ASCENDING)])  # For expiry cleanup
-                if verbose:
-                    print(f"Created indexes on email, token, and expires for PasswordResets collection")
-                    
-            elif collection_name == 'TokenBlacklist':
-                # Create indexes for TokenBlacklist collection
-                self._ensure_index(collection, [('token', ASCENDING)], unique=True)
-                self._ensure_index(collection, [('expires_at', ASCENDING)])  # For expiry cleanup
-                if verbose:
-                    print(f"Created indexes on token and expires_at for TokenBlacklist collection")
-                    
-            elif collection_name == 'DebugLogs':
-                # Create indexes for DebugLogs collection
-                self._ensure_index(collection, [('timestamp', ASCENDING)])
-                self._ensure_index(collection, [('level', ASCENDING)])
-                self._ensure_index(collection, [('bleoid', ASCENDING)])
-                if verbose:
-                    print(f"Created indexes on timestamp, level, and bleoid for DebugLogs collection")
-                    
-            elif collection_name == 'AppParameters':
-                # Create indexes for AppParameters collection
-                self._ensure_index(collection, [('id', ASCENDING)], unique=True)
-                if verbose:
-                    print(f"Created unique index on id for AppParameters collection")
-                    
-            if verbose:
-                print(f"Collection {collection_name} setup complete")
-                
+                    if verbose:
+                        print(f"❌ Error updating schema for {collection_name}: {str(e)}")
+        
         except Exception as e:
-            print(f"Error setting up collection {collection_name}: {str(e)}")
+            print(f"❌ Error setting up collection {collection_name}: {str(e)}")
             raise
 
-    def _migrate_from_1_1_0(self):
-        """Example migration from version 1.1.0"""
-        print("Running migration from version 1.1.0...")
-        # Implement your migration logic here
-        
-        # Finally, update the version
-        self.update_app_version("1.2.0")
-
-    def _migrate_from_1_2_0(self):
-        """Example migration from version 1.2.0"""
-        print("Running migration from version 1.2.0...")
-        # Implement your migration logic here
-        
-        # Finally, update the version
-        self.update_app_version("1.3.0")
+    def _setup_collection_indexes(self, collection_name):
+        """Setup indexes for a collection"""
+        if collection_name == self.COLLECTIONS['Users']:
+            self._db[collection_name].create_index([("email", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("username", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("BLEOId", ASCENDING)], unique=True)
+        elif collection_name == self.COLLECTIONS['PasswordResets']:
+            self._db[collection_name].create_index([("token", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("email", ASCENDING)])
+        elif collection_name == self.COLLECTIONS['TokenBlacklist']:
+            self._db[collection_name].create_index([("token", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("expires", ASCENDING)])
+        elif collection_name == self.COLLECTIONS['AppParameters']:
+            self._db[collection_name].create_index([("param_name", ASCENDING)], unique=True)
+        elif collection_name == self.COLLECTIONS['DebugLogs']:
+            self._db[collection_name].create_index([("date", ASCENDING)])
+            self._db[collection_name].create_index([("BLEOId", ASCENDING)])
+            self._db[collection_name].create_index([("type", ASCENDING)])
     
-    def _get_next_param_id(self):
-        """Get next parameter ID using max(id) + 1"""
-        try:
-            db = self._db[self.COLLECTIONS['AppParameters']]
-            # Find the document with the highest ID
-            result = db.find_one(sort=[("id", -1)])
-            
-            if result and "id" in result:
-                return result["id"] + 1
-            else:
-                return 0
-        except Exception as e:
-            print(f"Error getting next parameter ID: {str(e)}")
-            return 0
+    def get_collection(self, collection_key):
+        """Get MongoDB collection by key"""
+        if collection_key not in self.COLLECTIONS:
+            raise ValueError(f"Collection key not found: {collection_key}")
+        
+        collection_name = self.COLLECTIONS[collection_key]
+        return self._db[collection_name]
+
+    def get_db(self):
+        """Get MongoDB database instance"""
+        return self._db
+
+    @classmethod
+    def get_client(cls):
+        """Get MongoDB client instance"""
+        if cls._instance is None:
+            cls._instance = MongoDB()
+        return cls._instance._client
+
+    def get_client_instance(self):
+        """Get MongoDB client instance from current instance"""
+        return self._client

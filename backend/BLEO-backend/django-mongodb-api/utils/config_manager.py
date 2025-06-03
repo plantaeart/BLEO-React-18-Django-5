@@ -1,91 +1,92 @@
 import os
-import re
-import importlib
-from datetime import datetime
+from models.AppParameters import AppParameters
+from models.enums.DebugType import DebugType
+from utils.logger import Logger
+from models.enums.LogType import LogType
+from utils.parameter_manager import ParameterManager
 
 class ConfigManager:
-    """Configuration file manager for app state tracking"""
+    """Configuration manager for app state tracking and parameter management"""
     
     @staticmethod
     def get_app_state():
-        """Get current app state from config file"""
+        """Get current app state from MongoDB AppParameters collection"""
         try:
-            # Import the config module
-            from config import AppCurrentState
+            # Import here to avoid circular import
+            from utils.mongodb_utils import MongoDB
+            # Get parameters from database
+            db = MongoDB.get_instance().get_collection('AppParameters')
             
-            # Force reload to ensure we get the latest values
-            importlib.reload(AppCurrentState)
-            
+            return ParameterManager.get_app_state_direct(db)
+        except Exception as e:
+            Logger.server_error(f"Error loading parameters from database: {str(e)}")
+            # Return defaults if database access fails
             return {
-                'app_version': AppCurrentState.APP_VERSION,
-                'debug_level': AppCurrentState.DEBUG_LEVEL,
-            }
-        except (ImportError, AttributeError) as e:
-            print(f"Error loading AppCurrentState: {e}")
-            # Return defaults if file doesn't exist or has errors
-            return {
-                'app_version': "1.0.0",
-                'debug_level': "DEBUG",
+                AppParameters.PARAM_APP_VERSION: "1.0.0",
+                AppParameters.PARAM_DEBUG_LEVEL: DebugType.DEBUG.value,
             }
     
     @staticmethod
     def update_app_version(new_version):
-        """Update app version in config file"""
-        file_path = ConfigManager._get_config_path()
-        
+        """Update app version in database"""
         try:
-            # Read existing file
-            with open(file_path, 'r') as f:
-                content = f.read()
+            # Import here to avoid circular import
+            from utils.mongodb_utils import MongoDB
+            db = MongoDB.get_instance().get_collection('AppParameters')
             
-            # Update APP_VERSION
-            pattern = r'APP_VERSION\s*=\s*"[^"]*"'
-            replacement = f'APP_VERSION = "{new_version}"'
-            new_content = re.sub(pattern, replacement, content)
-            
-            # Write updated content
-            with open(file_path, 'w') as f:
-                f.write(new_content)
-            
-            return True
+            return ParameterManager.update_parameter_value(
+                db, 
+                AppParameters.PARAM_APP_VERSION, 
+                new_version
+            )
         except Exception as e:
-            print(f"Error updating app version: {e}")
+            Logger.server_error(f"Error updating app version: {str(e)}")
             return False
     
     @staticmethod
     def update_debug_level(debug_level):
-        """Update debug level in config file"""
-        file_path = ConfigManager._get_config_path()
-        
+        """Update debug level in database"""
         try:
-            # Read existing file
-            with open(file_path, 'r') as f:
-                content = f.read()
+            # Import here to avoid circular import
+            from utils.mongodb_utils import MongoDB
+            db = MongoDB.get_instance().get_collection('AppParameters')
             
-            # Update DEBUG_LEVEL
-            pattern = r'DEBUG_LEVEL\s*=\s*"[^"]*"'
-            replacement = f'DEBUG_LEVEL = "{debug_level}"'
-            new_content = re.sub(pattern, replacement, content)
-            
-            # Write updated content
-            with open(file_path, 'w') as f:
-                f.write(new_content)
-            
-            return True
+            return ParameterManager.update_parameter_value(
+                db, 
+                AppParameters.PARAM_DEBUG_LEVEL, 
+                debug_level
+            )
         except Exception as e:
-            print(f"Error updating debug level: {e}")
+            Logger.server_error(f"Error updating debug level: {str(e)}")
             return False
 
     @staticmethod
-    def _get_config_path():
-        """Get path to AppCurrentState.py file"""
-        # Get project root directory
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # Create config directory if it doesn't exist
-        config_dir = os.path.join(root_dir, 'config')
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-        
-        # Return full path to config file
-        return os.path.join(config_dir, 'AppCurrentState.py')
+    def get_parameter_value(param_name):
+        """Get specific parameter value from database"""
+        try:
+            # Import here to avoid circular import
+            from utils.mongodb_utils import MongoDB
+            db = MongoDB.get_instance().get_collection('AppParameters')
+            
+            return ParameterManager.get_parameter_value(db, param_name)
+        except Exception as e:
+            Logger.server_error(f"Error getting parameter {param_name}: {str(e)}")
+            return None
+    
+    @staticmethod
+    def update_parameter(param_name, param_value):
+        """Update specific parameter in database"""
+        if param_name == AppParameters.PARAM_APP_VERSION:
+            return ConfigManager.update_app_version(param_value)
+        elif param_name == AppParameters.PARAM_DEBUG_LEVEL:
+            return ConfigManager.update_debug_level(param_value)
+        else:
+            try:
+                # Import here to avoid circular import
+                from utils.mongodb_utils import MongoDB
+                db = MongoDB.get_instance().get_collection('AppParameters')
+                
+                return ParameterManager.update_parameter_value(db, param_name, param_value)
+            except Exception as e:
+                Logger.server_error(f"Error updating parameter {param_name}: {str(e)}")
+                return False
