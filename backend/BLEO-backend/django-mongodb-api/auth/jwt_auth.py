@@ -11,11 +11,20 @@ from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
 import os
 from dotenv import load_dotenv
+from utils.jwt_utils import setup_jwt_secret
 
-load_dotenv()  # Load environment variables
+load_dotenv()
 
-# Get JWT secret from environment or use a default
-JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-here')
+# Ensure JWT_SECRET exists and is secure
+jwt_setup = setup_jwt_secret()
+if not jwt_setup['success']:
+    print(f"⚠️  JWT Secret setup warning: {jwt_setup['message']}")
+
+# Get JWT secret from environment
+JWT_SECRET = os.getenv('JWT_SECRET')
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET not found in environment variables. Please run setup_jwt_secret().")
+
 ACCESS_TOKEN_EXPIRE = int(os.getenv('ACCESS_TOKEN_EXPIRE', '15'))  # minutes
 REFRESH_TOKEN_EXPIRE = int(os.getenv('REFRESH_TOKEN_EXPIRE', '7'))  # days
 

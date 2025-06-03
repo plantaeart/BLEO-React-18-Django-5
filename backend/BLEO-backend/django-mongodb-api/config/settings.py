@@ -132,3 +132,10 @@ DATABASES = {
 }
 
 TEST_RUNNER = 'tests.custom_test_runner.BLEOTestRunner'
+
+CELERY_BEAT_SCHEDULE = {
+     'check-jwt-rotation': {
+         'task': 'tasks.jwt_rotation_tasks.check_jwt_rotation',
+         'schedule': 86400.0,  # Run daily
+     },
+ }
