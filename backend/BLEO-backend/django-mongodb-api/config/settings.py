@@ -130,3 +130,5 @@ DATABASES = {
         },
     }
 }
+
+TEST_RUNNER = 'tests.custom_test_runner.BLEOTestRunner'

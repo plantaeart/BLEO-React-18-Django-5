@@ -361,4 +361,19 @@ class UserViewTest(BLEOBaseTest):
 
 # This will run if this file is executed directly
 if __name__ == '__main__':
+    import os
+    import django
+    
+    # Setup Django if not already done
+    if not hasattr(django.conf.settings, 'configured') or not django.conf.settings.configured:
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+        django.setup()
+    
+    # Import the enhanced test runner
+    from tests.base_test import run_test_with_output
+    
+    print("🚀 Running User View Tests with Enhanced Summary")
+    print("="*60)
+    
+    # Run with enhanced output
     run_test_with_output(UserViewTest)
