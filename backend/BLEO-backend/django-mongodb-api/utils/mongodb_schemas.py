@@ -3,11 +3,12 @@
 USER_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOId", "email", "password", "userName", "created_at"],
+        "required": ["bleoid", "email", "password", "userName", "created_at"],
         "properties": {
-            "BLEOId": {
+            "bleoid": {
                 "bsonType": "string",
-                "description": "Unique BLEO identifier with format #XXXXXX"
+                "pattern": "^[A-Z0-9]{6}$",
+                "description": "Unique BLEO identifier with format XXXXXX (6 chars)"
             },
             "email": {
                 "bsonType": "string",
@@ -28,6 +29,10 @@ USER_SCHEMA = {
             "email_verified": {
                 "bsonType": "bool",
                 "description": "Whether the user's email has been verified"
+            },
+            "email_verified_at": {
+                "bsonType": ["date", "null"],
+                "description": "When the email was verified"
             },
             "last_login": {
                 "bsonType": ["date", "null"],
@@ -52,15 +57,17 @@ USER_SCHEMA = {
 LINK_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["BLEOIdPartner1", "status", "created_at", "updated_at"],
+        "required": ["bleoidPartner1", "bleoidPartner2", "status", "created_at", "updated_at"],
         "properties": {
-            "BLEOIdPartner1": {
+            "bleoidPartner1": {
                 "bsonType": "string",
+                "pattern": "^[A-Z0-9]{6}$",
                 "description": "BLEO ID of first partner"
             },
-            "BLEOIdPartner2": {
-                "bsonType": ["string", "null"],
-                "description": "BLEO ID of second partner (optional)"
+            "bleoidPartner2": {
+                "bsonType": "string",
+                "pattern": "^[A-Z0-9]{6}$",
+                "description": "BLEO ID of second partner"
             },
             "status": {
                 "enum": ["pending", "accepted", "rejected", "blocked"],
@@ -108,14 +115,16 @@ MESSAGE_INFOS_SCHEMA = {
 MESSAGE_DAY_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["fromBLEOId", "toBLEOId", "date"],
+        "required": ["from_bleoid", "to_bleoid", "date"],
         "properties": {
-            "fromBLEOId": {
+            "from_bleoid": {
                 "bsonType": "string",
+                "pattern": "^[A-Z0-9]{6}$",
                 "description": "User BLEO identifier (sender)"
             },
-            "toBLEOId": {
-                "bsonType": "string",
+            "to_bleoid": {
+                "bsonType": "string", 
+                "pattern": "^[A-Z0-9]{6}$",
                 "description": "Partner BLEO identifier (recipient)"
             },
             "date": {
@@ -132,17 +141,17 @@ MESSAGE_DAY_SCHEMA = {
             },
             "energy_level": {
                 "bsonType": ["string", "null"],
-                "description": "Energy level for the day (high/low)"
+                "enum": ["High", "Low", None],
+                "description": "Energy level for the day (High/Low)"
             },
             "pleasantness": {
                 "bsonType": ["string", "null"],
+                "enum": ["pleasant", "unpleasant", None],
                 "description": "Pleasantness level for the day (pleasant/unpleasant)"
             }
         }
     }
 }
-
-# New schemas for authentication features
 
 PASSWORD_RESET_SCHEMA = {
     "$jsonSchema": {
@@ -199,7 +208,7 @@ DEBUG_LOGS_SCHEMA = {
                 "bsonType": "date",
                 "description": "Log date and time"
             },
-            "BLEOId": {
+            "bleoid": {
                 "bsonType": ["string", "null"],
                 "description": "User BLEO identifier (if applicable)"
             },
@@ -243,6 +252,51 @@ APP_PARAMETERS_SCHEMA = {
             },
             "param_value": {
                 "description": "Parameter value (can be any type)"
+            }
+        }
+    }
+}
+
+EMAIL_VERIFICATION_SCHEMA = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["bleoid", "email", "token", "created_at", "expires_at", "verified"],
+        "properties": {
+            "bleoid": {
+                "bsonType": "string",
+                "pattern": "^[A-Z0-9]{6}$",
+                "description": "User's BLEO ID"
+            },
+            "email": {
+                "bsonType": "string",
+                "pattern": "^[^@]+@[^@]+\\.[^@]+$",
+                "maxLength": 254,
+                "description": "User's email address for verification"
+            },
+            "token": {
+                "bsonType": "string",
+                "description": "JWT verification token"
+            },
+            "created_at": {
+                "bsonType": "date",
+                "description": "When the verification token was created"
+            },
+            "expires_at": {
+                "bsonType": "date",
+                "description": "When the verification token expires"
+            },
+            "verified": {
+                "bsonType": "bool",
+                "description": "Whether the email has been verified"
+            },
+            "attempts": {
+                "bsonType": "int",
+                "description": "Number of verification attempts",
+                "minimum": 0
+            },
+            "verified_at": {
+                "bsonType": ["date", "null"],
+                "description": "When the email verification was completed"
             }
         }
     }

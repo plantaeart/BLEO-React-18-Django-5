@@ -305,8 +305,6 @@ class AppParameterDetailView(APIView):
                 {"param_name": param_name}, 
                 {"$set": {"param_value": param_value}}
             )
-
-            print(f"Update result: matched={result.matched_count}, modified={result.modified_count}")
             
             Logger.system_action(
                 f"Update result: matched={result.matched_count}, modified={result.modified_count}",

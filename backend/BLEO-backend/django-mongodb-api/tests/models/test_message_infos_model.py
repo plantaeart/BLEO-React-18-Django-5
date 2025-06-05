@@ -114,6 +114,65 @@ class MessageInfosModelTest(BLEOBaseTest):
         self.assertEqual(message.created_at, created_at)
         
         print("  🔹 from_dict method creates MessageInfos object with correct values")
+    
+    def test_message_type_validation(self):
+        """Test MessageType validation and conversion"""
+        # Valid enum should work
+        msg1 = MessageInfos(
+            id=1,
+            title="Test",
+            text="Test message",
+            type=MessageType.THOUGHTS
+        )
+        self.assertEqual(msg1.type, MessageType.THOUGHTS)
+        
+        # Valid string should be converted to enum
+        msg2 = MessageInfos(
+            id=2,
+            title="Test",
+            text="Test message",
+            type="Thoughts"
+        )
+        self.assertEqual(msg2.type, MessageType.THOUGHTS)
+        
+        # Invalid string should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            MessageInfos(
+                id=3,
+                title="Test",
+                text="Test message",
+                type="invalid_type"
+            )
+        
+        self.assertIn("Invalid message type", str(context.exception))
+        
+        # Invalid type should raise ValueError
+        with self.assertRaises(ValueError) as context:
+            MessageInfos(
+                id=4,
+                title="Test",
+                text="Test message",
+                type=123  # Invalid type
+            )
+        
+        print("  🔹 MessageInfos MessageType validation works correctly")
+
+    def test_to_dict_enum_conversion(self):
+        """Test to_dict converts enum to string value"""
+        msg = MessageInfos(
+            id=1,
+            title="Test",
+            text="Test message",
+            type=MessageType.SOUVENIR
+        )
+        
+        msg_dict = msg.to_dict()
+        
+        # Should convert enum to string value
+        self.assertEqual(msg_dict["type"], MessageType.SOUVENIR.value)
+        self.assertIsInstance(msg_dict["type"], str)
+        
+        print("  🔹 to_dict correctly converts MessageType enum to string")
 
 
 # This will run if this file is executed directly

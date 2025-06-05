@@ -12,6 +12,16 @@ class MessageInfos:
         type: MessageType,
         created_at: datetime = None,
     ):
+        # Validate message type
+        if isinstance(type, str):
+            # Convert string to enum
+            try:
+                type = MessageType(type)
+            except ValueError:
+                raise ValueError(f"Invalid message type: {type}. Must be one of: {[t.value for t in MessageType]}")
+        elif not isinstance(type, MessageType):
+            raise ValueError("type must be a MessageType enum or valid string")
+        
         self.id = id
         self.title = title
         self.text = text
@@ -23,7 +33,7 @@ class MessageInfos:
             "id": self.id,
             "title": self.title,
             "text": self.text,
-            "type": self.type,
+            "type": self.type.value if isinstance(self.type, MessageType) else self.type,
             "created_at": self.created_at
         }
     

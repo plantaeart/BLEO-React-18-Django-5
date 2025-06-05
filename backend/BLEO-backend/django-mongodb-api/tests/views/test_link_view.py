@@ -17,7 +17,7 @@ from models.response.BLEOResponse import BLEOResponse
 # Set up URL configuration for testing
 urlpatterns = [
     path('links/', LinkListCreateView.as_view(), name='link-list'),
-    path('links/<str:bleoidPartner1>/', LinkDetailView.as_view(), name='link-detail'),
+    path('links/<str:bleoid>/', LinkDetailView.as_view(), name='link-detail'),
     path('users/', UserListCreateView.as_view(), name='user-list'),
     path('users/<str:bleoid>/', UserDetailView.as_view(), name='user-detail'),
 ]
@@ -88,28 +88,28 @@ class LinkViewTest(BLEOBaseTest):
             # Create sample test users
             self.test_users = [
                 {
-                    'BLEOId': 'USER1',
+                    'bleoid': 'USER01',
                     'email': 'user1@example.com',
                     'password': make_password('Password123'),
                     'userName': 'TestUser1',
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'USER2',
+                    'bleoid': 'USER02',
                     'email': 'user2@example.com',
                     'password': make_password('Password345'),
                     'userName': 'TestUser2',
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'USER3',
+                    'bleoid': 'USER03',
                     'email': 'user3@example.com',
                     'password': make_password('Password567'),
                     'userName': 'TestUser3',
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'USER4',
+                    'bleoid': 'USER04',
                     'email': 'user4@example.com',
                     'password': make_password('Password8910'),
                     'userName': 'TestUser4',
@@ -122,21 +122,21 @@ class LinkViewTest(BLEOBaseTest):
             for i, user in enumerate(self.test_users):
                 result = self.db_users.insert_one(user)
                 self.user_ids.append(result.inserted_id)
-                print(f"  ✅ Created test user {i+1}: {user['BLEOId']}")
+                print(f"  ✅ Created test user {i+1}: {user['bleoid']}")
             
             # Create sample test links
             now = datetime.now()
             self.test_links = [
                 {
-                    'BLEOIdPartner1': 'USER1',
-                    'BLEOIdPartner2': 'USER2',
+                    'bleoidPartner1': 'USER01',
+                    'bleoidPartner2': 'USER02',
                     'status': ConnectionStatusType.ACCEPTED.value,
                     'created_at': now,
                     'updated_at': now
                 },
                 {
-                    'BLEOIdPartner1': 'USER3',
-                    'BLEOIdPartner2': 'USER4',
+                    'bleoidPartner1': 'USER03',
+                    'bleoidPartner2': 'USER04',
                     'status': ConnectionStatusType.PENDING.value,
                     'created_at': now,
                     'updated_at': now
@@ -148,7 +148,7 @@ class LinkViewTest(BLEOBaseTest):
             for i, link in enumerate(self.test_links):
                 result = self.db_links.insert_one(link)
                 self.link_ids.append(result.inserted_id)
-                print(f"  ✅ Created test link {i+1}: {link['BLEOIdPartner1']} -> {link['BLEOIdPartner2']}")
+                print(f"  ✅ Created test link {i+1}: {link['bleoidPartner1']} -> {link['bleoidPartner2']}")
             
             print(f"🔧 Test environment setup with {len(self.user_ids)} users and {len(self.link_ids)} links")
             
@@ -173,8 +173,8 @@ class LinkViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['data']), 2)
-        self.assertEqual(response.data['data'][0]['BLEOIdPartner1'], 'USER1')
-        self.assertEqual(response.data['data'][1]['BLEOIdPartner1'], 'USER3')
+        self.assertEqual(response.data['data'][0]['bleoidPartner1'], 'USER01')
+        self.assertEqual(response.data['data'][1]['bleoidPartner1'], 'USER03')
         self.assertEqual(response.data['successMessage'], 'Links retrieved successfully')
         
         print("  🔹 Successfully retrieved all links")
@@ -183,7 +183,7 @@ class LinkViewTest(BLEOBaseTest):
         """Test creating a new link successfully"""
         # Create a new user for this test
         new_user = {
-            'BLEOId': 'USER5',
+            'bleoid': 'USER05',
             'email': 'user5@example.com',
             'password': make_password('Password268'),
             'userName': 'TestUser5',
@@ -192,7 +192,7 @@ class LinkViewTest(BLEOBaseTest):
         self.db_users.insert_one(new_user)
         
         new_partner = {
-            'BLEOId': 'USER6',
+            'bleoid': 'USER06',
             'email': 'user6@example.com',
             'password': make_password('Password0985'),
             'userName': 'TestUser6',
@@ -202,8 +202,8 @@ class LinkViewTest(BLEOBaseTest):
         
         # Request data
         link_data = {
-            'BLEOIdPartner1': 'USER5',
-            'BLEOIdPartner2': 'USER6',
+            'bleoidPartner1': 'USER05',
+            'bleoidPartner2': 'USER06',
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -212,17 +212,17 @@ class LinkViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['data']['BLEOIdPartner1'], 'USER5')
-        self.assertEqual(response.data['data']['BLEOIdPartner2'], 'USER6')
+        self.assertEqual(response.data['data']['bleoidPartner1'], 'USER05')
+        self.assertEqual(response.data['data']['bleoidPartner2'], 'USER06')
         self.assertEqual(response.data['data']['status'], ConnectionStatusType.PENDING.value)
         
-        print(f"  🔹 Successfully created link for USER5 with partner USER6")
+        print(f"  🔹 Successfully created link for USER05 with partner USER06")
     
     def test_create_link_with_partner(self):
         """Test creating a link with partner reference"""
         # First create a new user for this test
         new_user = {
-            'BLEOId': 'USER5',
+            'bleoid': 'USER05',
             'email': 'user5@example.com',
             'password': make_password('Password123'),
             'userName': 'TestUser5',
@@ -232,8 +232,8 @@ class LinkViewTest(BLEOBaseTest):
         
         # Request data
         link_data = {
-            'BLEOIdPartner1': 'USER5',
-            'BLEOIdPartner2': 'USER3',  # USER3 exists and has no partner yet
+            'bleoidPartner1': 'USER05',
+            'bleoidPartner2': 'USER03',  # USER03 exists and has no partner yet
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -242,17 +242,18 @@ class LinkViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['data']['BLEOIdPartner1'], 'USER5')
-        self.assertEqual(response.data['data']['BLEOIdPartner2'], 'USER3')
+        self.assertEqual(response.data['data']['bleoidPartner1'], 'USER05')
+        self.assertEqual(response.data['data']['bleoidPartner2'], 'USER03')
         self.assertEqual(response.data['successMessage'], 'Link created successfully')
         
-        print(f"  🔹 Successfully created link for USER5 with partner USER3")
+        print(f"  🔹 Successfully created link for USER05 with partner USER03")
     
     def test_create_link_duplicate(self):
         """Test error when creating duplicate link"""
-        # Request data with existing BLEOIdPartner1
+        # Request data with existing bleoidPartner1
         link_data = {
-            'BLEOIdPartner1': 'USER1',  # USER1 already has a link
+            'bleoidPartner1': 'USER01',  # USER01 already has a link
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -262,7 +263,7 @@ class LinkViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data['errorType'], 'DuplicateError')
-        self.assertEqual(response.data['errorMessage'], 'Link with BLEOIdPartner1=USER1 already exists')
+        self.assertEqual(response.data['errorMessage'], 'Link with bleoidPartner1=USER01 already exists')
         
         print("  🔹 Properly rejected duplicate link")
     
@@ -270,7 +271,8 @@ class LinkViewTest(BLEOBaseTest):
         """Test error when creating a link for a nonexistent user"""
         # Request data with nonexistent user
         link_data = {
-            'BLEOIdPartner1': 'NONEXISTENT',
+            'bleoidPartner1': 'NOP001',
+            'bleoidPartner2': 'NOP002',
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -280,7 +282,7 @@ class LinkViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'User with BLEOId NONEXISTENT not found')
+        self.assertEqual(response.data['errorMessage'], 'User with bleoid NOP001 not found')
         
         print("  🔹 Properly rejected link for nonexistent user")
     
@@ -288,8 +290,8 @@ class LinkViewTest(BLEOBaseTest):
         """Test error when creating a link with nonexistent partner"""
         # Request data with nonexistent partner
         link_data = {
-            'BLEOIdPartner1': 'USER3',  # USER3 exists
-            'BLEOIdPartner2': 'NONEXISTENT',  # But this partner doesn't
+            'bleoidPartner1': 'USER03',  # USER03 exists
+            'bleoidPartner2': 'NOP001',  # But this partner doesn't
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -299,13 +301,13 @@ class LinkViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'User with BLEOId NONEXISTENT not found')
+        self.assertEqual(response.data['errorMessage'], 'User with bleoid NOP001 not found')
         
         print("  🔹 Properly rejected link with nonexistent partner")
     
     def test_create_link_invalid_data(self):
         """Test error when creating a link with invalid data"""
-        # Request data missing required BLEOIdPartner1
+        # Request data missing required bleoidPartner1
         link_data = {
             'status': ConnectionStatusType.PENDING.value
         }
@@ -316,35 +318,35 @@ class LinkViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data['errorType'], 'ValidationError')
-        self.assertIn('BLEOIdPartner1', response.data['validationErrors'])
+        self.assertIn('bleoidPartner1', response.data['validationErrors'])
         
-        print("  🔹 Properly rejected invalid data (missing BLEOIdPartner1)")
+        print("  🔹 Properly rejected invalid data (missing bleoidPartner1)")
     
     # ====== LinkDetailView Tests ======
     
     def test_get_link_by_bleoidPartner1(self):
-        """Test getting a link by BLEOIdPartner1"""
+        """Test getting a link by bleoidPartner1"""
         # Make request
-        response = self.client.get('/links/USER1/')
+        response = self.client.get('/links/USER01/')
         
         # Check response
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['data']['BLEOIdPartner1'], 'USER1')
-        self.assertEqual(response.data['data']['BLEOIdPartner2'], 'USER2')
+        self.assertEqual(response.data['data']['bleoidPartner1'], 'USER01')
+        self.assertEqual(response.data['data']['bleoidPartner2'], 'USER02')
         self.assertEqual(response.data['data']['status'], ConnectionStatusType.ACCEPTED.value)
         self.assertEqual(response.data['successMessage'], 'Link retrieved successfully')
         
-        print("  🔹 Successfully retrieved link by BLEOIdPartner1")
+        print("  🔹 Successfully retrieved link by bleoidPartner1")
     
     def test_get_nonexistent_link(self):
         """Test error when getting a nonexistent link"""
-        # Make request with nonexistent BLEOIdPartner1
-        response = self.client.get('/links/NONEXISTENT/')
+        # Make request with nonexistent bleoidPartner1
+        response = self.client.get('/links/NOP001/')
         
         # Check response
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOIdPartner1=NONEXISTENT')
+        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOID=NOP001')
         
         print("  🔹 Properly handled nonexistent link")
     
@@ -356,17 +358,17 @@ class LinkViewTest(BLEOBaseTest):
         }
         
         # Make request
-        response = self.client.put('/links/USER1/', update_data, format='json')
+        response = self.client.put('/links/USER01/', update_data, format='json')
         
         # Check response
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['data']['BLEOIdPartner1'], 'USER1')
-        self.assertEqual(response.data['data']['BLEOIdPartner2'], 'USER2')
+        self.assertEqual(response.data['data']['bleoidPartner1'], 'USER01')
+        self.assertEqual(response.data['data']['bleoidPartner2'], 'USER02')
         self.assertEqual(response.data['data']['status'], ConnectionStatusType.BLOCKED.value)
         self.assertEqual(response.data['successMessage'], 'Link updated successfully')
         
         # Verify changes in database
-        updated_link = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        updated_link = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertEqual(updated_link['status'], ConnectionStatusType.BLOCKED.value)
         
         print("  🔹 Successfully updated link status")
@@ -374,28 +376,28 @@ class LinkViewTest(BLEOBaseTest):
     def test_update_link_change_partner(self):
         """Test changing a partner by deleting the old link and creating a new one"""
         # First verify initial state
-        initial_link1 = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
-        self.assertEqual(initial_link1['BLEOIdPartner2'], 'USER2')
+        initial_link1 = self.db_links.find_one({'bleoidPartner1': 'USER01'})
+        self.assertEqual(initial_link1['bleoidPartner2'], 'USER02')
         
-        initial_link3 = self.db_links.find_one({'BLEOIdPartner1': 'USER3'})
-        self.assertEqual(initial_link3['BLEOIdPartner2'], 'USER4')
+        initial_link3 = self.db_links.find_one({'bleoidPartner1': 'USER03'})
+        self.assertEqual(initial_link3['bleoidPartner2'], 'USER04')
         
-        # First delete USER1's link with USER2
-        delete_response = self.client.delete('/links/USER1/')
+        # First delete USER01's link with USER02
+        delete_response = self.client.delete('/links/USER01/')
         self.assertEqual(delete_response.status_code, 200)
         
-        # Verify USER1's link was deleted
-        deleted_link = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        # Verify USER01's link was deleted
+        deleted_link = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertIsNone(deleted_link)
         
-        # Verify USER2's link is also deleted
-        updated_link2 = self.db_links.find_one({'BLEOIdPartner1': 'USER2'})
+        # Verify USER02's link is also deleted
+        updated_link2 = self.db_links.find_one({'bleoidPartner1': 'USER02'})
         self.assertIsNone(updated_link2)
         
-        # Now create a new link between USER1 and USER3
+        # Now create a new link between USER01 and USER03
         new_link_data = {
-            'BLEOIdPartner1': 'USER1',
-            'BLEOIdPartner2': 'USER3',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER03',
             'status': ConnectionStatusType.PENDING.value
         }
         
@@ -404,16 +406,16 @@ class LinkViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(create_response.status_code, 201)
-        self.assertEqual(create_response.data['data']['BLEOIdPartner1'], 'USER1')
-        self.assertEqual(create_response.data['data']['BLEOIdPartner2'], 'USER3')
+        self.assertEqual(create_response.data['data']['bleoidPartner1'], 'USER01')
+        self.assertEqual(create_response.data['data']['bleoidPartner2'], 'USER03')
         
-        # Verify in database that USER1 now has a link to USER3
-        new_link1 = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        # Verify in database that USER01 now has a link to USER03
+        new_link1 = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertIsNotNone(new_link1)
-        self.assertEqual(new_link1['BLEOIdPartner2'], 'USER3')
+        self.assertEqual(new_link1['bleoidPartner2'], 'USER03')
         
-        # Verify USER3's status - should still have the link with USER4
-        user3_link = self.db_links.find_one({'BLEOIdPartner1': 'USER3'})
+        # Verify USER03's status - should still have the link with USER04
+        user3_link = self.db_links.find_one({'bleoidPartner1': 'USER03'})
         self.assertIsNotNone(user3_link)
         
         print("  🔹 Successfully changed partner by deleting and recreating link")
@@ -425,13 +427,13 @@ class LinkViewTest(BLEOBaseTest):
             'status': ConnectionStatusType.ACCEPTED.value
         }
         
-        # Make request with nonexistent BLEOIdPartner1
-        response = self.client.put('/links/NONEXISTENT/', update_data, format='json')
+        # Make request with nonexistent bleoidPartner1
+        response = self.client.put('/links/NOP001/', update_data, format='json')
         
         # Check response
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOIdPartner1=NONEXISTENT')
+        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOID=NOP001')
         
         print("  🔹 Properly handled update for nonexistent link")
     
@@ -443,7 +445,7 @@ class LinkViewTest(BLEOBaseTest):
         }
         
         # Make request
-        response = self.client.put('/links/USER1/', update_data, format='json')
+        response = self.client.put('/links/USER01/', update_data, format='json')
         
         # Check response - FIX: using response.data instead of response
         self.assertEqual(response.status_code, 400)
@@ -455,18 +457,18 @@ class LinkViewTest(BLEOBaseTest):
     def test_delete_link_success(self):
         """Test deleting a link successfully"""
         # Make request
-        response = self.client.delete('/links/USER3/')
+        response = self.client.delete('/links/USER03/')
         
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['successMessage'], 'Link deleted successfully')
         
         # Verify link was deleted from database
-        link = self.db_links.find_one({'BLEOIdPartner1': 'USER3'})
+        link = self.db_links.find_one({'bleoidPartner1': 'USER03'})
         self.assertIsNone(link)
         
         # Verify partner's link is also deleted
-        link4 = self.db_links.find_one({'BLEOIdPartner1': 'USER4'})
+        link4 = self.db_links.find_one({'bleoidPartner1': 'USER04'})
         self.assertIsNone(link4)
         
         print("  🔹 Successfully deleted link for both partners")
@@ -474,31 +476,31 @@ class LinkViewTest(BLEOBaseTest):
     def test_delete_link_with_partner(self):
         """Test deleting a link that has a partner"""
         # Make request
-        response = self.client.delete('/links/USER1/')  # USER1 is linked to USER2
+        response = self.client.delete('/links/USER01/')  # USER01 is linked to USER02
         
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['successMessage'], 'Link deleted successfully')
         
         # Verify link was deleted from database for both users
-        link1 = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        link1 = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertIsNone(link1)
         
         # Partner's link should also be deleted
-        link2 = self.db_links.find_one({'BLEOIdPartner1': 'USER2'})
+        link2 = self.db_links.find_one({'bleoidPartner1': 'USER02'})
         self.assertIsNone(link2)
         
         print("  🔹 Successfully deleted link for both partners")
     
     def test_delete_nonexistent_link(self):
         """Test error when deleting a nonexistent link"""
-        # Make request with nonexistent BLEOIdPartner1
-        response = self.client.delete('/links/NONEXISTENT/')
+        # Make request with nonexistent bleoidPartner1
+        response = self.client.delete('/links/NOP001/')
         
         # Check response
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOIdPartner1=NONEXISTENT')
+        self.assertEqual(response.data['errorMessage'], 'No link found for BLEOID=NOP001')
         
         print("  🔹 Properly handled delete for nonexistent link")
     
@@ -508,36 +510,36 @@ class LinkViewTest(BLEOBaseTest):
         user_client = APIClient()
         
         # First verify our links exist
-        link1 = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        link1 = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertIsNotNone(link1)
-        self.assertEqual(link1['BLEOIdPartner2'], 'USER2')
+        self.assertEqual(link1['bleoidPartner2'], 'USER02')
         
-        link3 = self.db_links.find_one({'BLEOIdPartner1': 'USER3'})
+        link3 = self.db_links.find_one({'bleoidPartner1': 'USER03'})
         self.assertIsNotNone(link3)
-        self.assertEqual(link3['BLEOIdPartner2'], 'USER4')
+        self.assertEqual(link3['bleoidPartner2'], 'USER04')
         
-        # Delete USER1 through the User API
-        user_delete_response = user_client.delete('/users/USER1/')
+        # Delete USER01 through the User API
+        user_delete_response = user_client.delete('/users/USER01/')
         self.assertEqual(user_delete_response.status_code, 200)
         
-        # Verify that USER1's link has been deleted
-        deleted_link1 = self.db_links.find_one({'BLEOIdPartner1': 'USER1'})
+        # Verify that USER01's link has been deleted
+        deleted_link1 = self.db_links.find_one({'bleoidPartner1': 'USER01'})
         self.assertIsNone(deleted_link1)
         
-        # Verify that USER2's link has been deleted too
-        user2_link = self.db_links.find_one({'BLEOIdPartner1': 'USER2'})
+        # Verify that USER02's link has been deleted too
+        user2_link = self.db_links.find_one({'bleoidPartner1': 'USER02'})
         self.assertIsNone(user2_link)
         
-        # Now delete USER3
-        user_delete_response = user_client.delete('/users/USER3/')
+        # Now delete USER03
+        user_delete_response = user_client.delete('/users/USER03/')
         self.assertEqual(user_delete_response.status_code, 200)
         
-        # Verify that USER3's link has been deleted
-        deleted_link3 = self.db_links.find_one({'BLEOIdPartner1': 'USER3'})
+        # Verify that USER03's link has been deleted
+        deleted_link3 = self.db_links.find_one({'bleoidPartner1': 'USER03'})
         self.assertIsNone(deleted_link3)
         
-        # Verify that USER4's link has been deleted too
-        user4_link = self.db_links.find_one({'BLEOIdPartner1': 'USER4'})
+        # Verify that USER04's link has been deleted too
+        user4_link = self.db_links.find_one({'bleoidPartner1': 'USER04'})
         self.assertIsNone(user4_link)
         
         print("  🔹 Successfully verified links are deleted when users are deleted")

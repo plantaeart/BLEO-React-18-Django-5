@@ -11,6 +11,7 @@ from django.contrib.auth.hashers import make_password
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
+from utils.privacy_utils import PrivacyUtils
 
 class PasswordResetRequestView(APIView):
     """Request a password reset"""
@@ -39,7 +40,7 @@ class PasswordResetRequestView(APIView):
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
             # Mask email for logging
-            masked_email = self._mask_email(email)
+            masked_email = PrivacyUtils.mask_email(email)
             
             # Log reset attempt
             Logger.debug_system_action(
@@ -66,7 +67,7 @@ class PasswordResetRequestView(APIView):
                 ).to_response()
             
             # Get user's bleoid for logging
-            bleoid = user.get('BLEOId')
+            bleoid = user.get('bleoid')
             
             # Generate reset token
             token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(40))
@@ -132,25 +133,6 @@ class PasswordResetRequestView(APIView):
             return BLEOResponse.server_error(
                 message=f"Failed to process password reset request: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _mask_email(self, email):
-        """Mask email for logging purposes"""
-        try:
-            if not email or '@' not in email:
-                return "invalid-email"
-                
-            parts = email.split('@')
-            username = parts[0]
-            domain = parts[1]
-            
-            if len(username) <= 3:
-                masked_username = username[0] + '*' * (len(username) - 1)
-            else:
-                masked_username = username[0:2] + '*' * (len(username) - 3) + username[-1]
-                
-            return f"{masked_username}@{domain}"
-        except:
-            return "invalid-email"
 
 class PasswordResetConfirmView(APIView):
     """Confirm a password reset"""
@@ -216,12 +198,12 @@ class PasswordResetConfirmView(APIView):
             
             # Get email and mask it for logging
             email = reset.get("email")
-            masked_email = self._mask_email(email)
+            masked_email = PrivacyUtils.mask_email(email)
             
             # Get user from DB to find bleoid
             db_users = MongoDB.get_instance().get_collection('Users')
             user = db_users.find_one({"email": email})
-            bleoid = user.get('BLEOId') if user else None
+            bleoid = user.get('bleoid') if user else None
             
             # Log valid token
             Logger.debug_system_action(
@@ -276,22 +258,3 @@ class PasswordResetConfirmView(APIView):
             return BLEOResponse.server_error(
                 message=f"Failed to reset password: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _mask_email(self, email):
-        """Mask email for logging purposes"""
-        try:
-            if not email or '@' not in email:
-                return "invalid-email"
-                
-            parts = email.split('@')
-            username = parts[0]
-            domain = parts[1]
-            
-            if len(username) <= 3:
-                masked_username = username[0] + '*' * (len(username) - 1)
-            else:
-                masked_username = username[0:2] + '*' * (len(username) - 3) + username[-1]
-                
-            return f"{masked_username}@{domain}"
-        except:
-            return "invalid-email"

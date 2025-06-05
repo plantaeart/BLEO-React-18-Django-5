@@ -14,44 +14,39 @@ class ConnectionRequestView(APIView):
     """API view for sending connection requests"""
     
     def post(self, request):
-        """Send a connection request"""
+        """Send connection request with enhanced validation"""
         try:
-            # Get IDs for logging
-            from_bleoid = request.data.get('from_bleoid')
-            to_bleoid = request.data.get('to_bleoid')
-
-            # Log request
-            Logger.debug_user_action(
-                from_bleoid,
-                f"Sending connection request to user {to_bleoid}",
-                LogType.INFO.value,
-                200
-            )
-            
-            # Validate request data using serializer
+            # Use serializer with enhanced BLEOID validation
             serializer = ConnectionRequestSerializer(data=request.data)
             if not serializer.is_valid():
-                # Log validation error
+                # Enhanced error logging for BLEOID validation
+                error_details = []
+                if 'from_bleoid' in serializer.errors:
+                    error_details.append(f"From BLEOID: {serializer.errors['from_bleoid']}")
+                if 'to_bleoid' in serializer.errors:
+                    error_details.append(f"To BLEOID: {serializer.errors['to_bleoid']}")
+                
                 Logger.debug_error(
-                    f"Invalid connection request data: {serializer.errors}",
+                    f"Connection request validation failed: {', '.join(error_details)}",
                     400,
-                    from_bleoid,
+                    request.data.get('from_bleoid'),
                     ErrorSourceType.SERVER.value
                 )
                 
                 return BLEOResponse.validation_error(
-                    message="Invalid data",
+                    message="Invalid connection request data",
                     errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
             validated_data = serializer.validated_data
+            # BLEOIDs are now guaranteed to be valid format and different
             from_bleoid = validated_data['from_bleoid']
             to_bleoid = validated_data['to_bleoid']
             
             # Check users exist
             db_users = MongoDB.get_instance().get_collection('Users')
-            from_user = db_users.find_one({"BLEOId": from_bleoid})
-            to_user = db_users.find_one({"BLEOId": to_bleoid})
+            from_user = db_users.find_one({"bleoid": from_bleoid})
+            to_user = db_users.find_one({"bleoid": to_bleoid})
             
             if not from_user or not to_user:
                 # Log user not found error
@@ -70,13 +65,13 @@ class ConnectionRequestView(APIView):
             
             # Check if sender already has an active connection or pending request
             existing_from = db_links.find_one({
-                "BLEOIdPartner1": from_bleoid,
-                "BLEOIdPartner2": {"$ne": None},
+                "bleoidPartner1": from_bleoid,
+                "bleoidPartner2": {"$ne": None},
                 "status": {"$in": [ConnectionStatusType.PENDING, ConnectionStatusType.ACCEPTED]}
             })
             
             if existing_from:
-                if existing_from["BLEOIdPartner2"] == to_bleoid:
+                if existing_from["bleoidPartner2"] == to_bleoid:
                     # Log duplicate connection error
                     Logger.debug_error(
                         f"User {from_bleoid} already has a connection request with {to_bleoid}",
@@ -92,7 +87,7 @@ class ConnectionRequestView(APIView):
                 else:
                     # Log connection limit error
                     Logger.debug_error(
-                        f"User {from_bleoid} already has an active connection with {existing_from['BLEOIdPartner2']}",
+                        f"User {from_bleoid} already has an active connection with {existing_from['bleoidPartner2']}",
                         400,
                         from_bleoid,
                         ErrorSourceType.SERVER.value
@@ -106,14 +101,14 @@ class ConnectionRequestView(APIView):
             # Check if receiver already has an active connection
             existing_to = db_links.find_one({
                 "$or": [
-                    {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
-                    {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
+                    {"bleoidPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
+                    {"bleoidPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
                 ]
             })
             
             if existing_to:
                 # Log connection limit error for receiver
-                other_user = existing_to["BLEOIdPartner1"] if existing_to["BLEOIdPartner2"] == to_bleoid else existing_to["BLEOIdPartner2"]
+                other_user = existing_to["bleoidPartner1"] if existing_to["bleoidPartner2"] == to_bleoid else existing_to["bleoidPartner2"]
                 Logger.debug_error(
                     f"User {to_bleoid} already has an active connection with {other_user}",
                     400,
@@ -128,8 +123,8 @@ class ConnectionRequestView(APIView):
             
             # Check for existing rejected/blocked requests - allow overwrite
             existing_rejected = db_links.find_one({
-                "BLEOIdPartner1": from_bleoid,
-                "BLEOIdPartner2": to_bleoid,
+                "bleoidPartner1": from_bleoid,
+                "bleoidPartner2": to_bleoid,
                 "status": {"$in": [ConnectionStatusType.REJECTED, ConnectionStatusType.BLOCKED]}
             })
             
@@ -174,8 +169,8 @@ class ConnectionRequestView(APIView):
             
             # Create connection request
             link = {
-                "BLEOIdPartner1": from_bleoid,
-                "BLEOIdPartner2": to_bleoid,
+                "bleoidPartner1": from_bleoid,
+                "bleoidPartner2": to_bleoid,
                 "status": ConnectionStatusType.PENDING,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
@@ -275,8 +270,8 @@ class ConnectionResponseView(APIView):
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Extract user IDs for logging
-            from_bleoid = connection.get('BLEOIdPartner1')
-            to_bleoid = connection.get('BLEOIdPartner2')
+            from_bleoid = connection.get('bleoidPartner1')
+            to_bleoid = connection.get('bleoidPartner2')
                 
             # If accepting, check if receiver already has an active connection
             if action == 'accept':
@@ -293,15 +288,15 @@ class ConnectionResponseView(APIView):
                     "$and": [
                         {"_id": {"$ne": ObjectId(connection_id)}},  # Exclude current connection
                         {"$or": [
-                            {"BLEOIdPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
-                            {"BLEOIdPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
+                            {"bleoidPartner1": to_bleoid, "status": ConnectionStatusType.ACCEPTED},
+                            {"bleoidPartner2": to_bleoid, "status": ConnectionStatusType.ACCEPTED}
                         ]}
                     ]
                 })
                 
                 if existing_to:
                     # Log limit error
-                    other_user = existing_to.get('BLEOIdPartner1') if existing_to.get('BLEOIdPartner2') == to_bleoid else existing_to.get('BLEOIdPartner2')
+                    other_user = existing_to.get('bleoidPartner1') if existing_to.get('bleoidPartner2') == to_bleoid else existing_to.get('bleoidPartner2')
                     Logger.debug_error(
                         f"User {to_bleoid} already has an active connection with {other_user}",
                         400,
@@ -383,27 +378,20 @@ class ConnectionListView(APIView):
     """API view for listing user connections"""
     
     def get(self, request):
-        """Get all connections for a user"""
+        """Get all connections for a user with enhanced filtering"""
         try:
-            # Get bleoid for logging
-            bleoid = request.query_params.get('bleoid')
-            
-            # Log request
-            Logger.debug_user_action(
-                bleoid,
-                "Retrieving connections list",
-                LogType.INFO.value,
-                200
-            )
-            
-            # Validate query parameters
+            # Validate query parameters with enhanced BLEOID validation
             filter_serializer = ConnectionFilterSerializer(data=request.query_params)
             if not filter_serializer.is_valid():
-                # Log validation error
+                # Enhanced error logging for filter validation
+                error_details = []
+                if 'bleoid' in filter_serializer.errors:
+                    error_details.append(f"bleoid: {filter_serializer.errors['bleoid']}")
+                
                 Logger.debug_error(
-                    f"Invalid connection filter parameters: {filter_serializer.errors}",
+                    f"Connection filter validation failed: {', '.join(error_details)}",
                     400,
-                    bleoid,
+                    request.query_params.get('bleoid'),
                     ErrorSourceType.SERVER.value
                 )
                 
@@ -413,17 +401,18 @@ class ConnectionListView(APIView):
                 ).to_response(status.HTTP_400_BAD_REQUEST)
 
             validated_filters = filter_serializer.validated_data
+            # BLEOID is now guaranteed to be valid format
             bleoid = validated_filters['bleoid']
             status_filter = validated_filters.get('status')
             direction = validated_filters.get('direction', 'both')
             
             # Build query based on direction
             if direction == 'outgoing':
-                query = {"BLEOIdPartner1": bleoid}
+                query = {"bleoidPartner1": bleoid}
             elif direction == 'incoming':
-                query = {"BLEOIdPartner2": bleoid}
+                query = {"bleoidPartner2": bleoid}
             else: # both
-                query = {"$or": [{"BLEOIdPartner1": bleoid}, {"BLEOIdPartner2": bleoid}]}
+                query = {"$or": [{"bleoidPartner1": bleoid}, {"bleoidPartner2": bleoid}]}
             
             # Add status filter if not 'all'
             if status_filter and status_filter != 'all':
@@ -446,11 +435,11 @@ class ConnectionListView(APIView):
                 conn['_id'] = str(conn['_id'])
                 
                 # Add user info for the other party in each connection
-                other_id = conn['BLEOIdPartner2'] if conn['BLEOIdPartner1'] == bleoid else conn['BLEOIdPartner1']
+                other_id = conn['bleoidPartner2'] if conn['bleoidPartner1'] == bleoid else conn['bleoidPartner1']
                 
                 # Get other user's name and profile pic
                 db_users = MongoDB.get_instance().get_collection('Users')
-                other_user = db_users.find_one({"BLEOId": other_id}, {"userName": 1, "profilePic": 1, "email": 1})
+                other_user = db_users.find_one({"bleoid": other_id}, {"userName": 1, "profilePic": 1, "email": 1})
                 
                 if other_user:
                     other_user['_id'] = str(other_user.get('_id', ''))

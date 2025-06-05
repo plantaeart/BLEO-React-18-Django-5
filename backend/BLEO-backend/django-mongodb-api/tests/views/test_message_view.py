@@ -101,7 +101,7 @@ class MessageViewTest(BLEOBaseTest):
             # Create sample test users
             self.test_users = [
                 {
-                    'BLEOId': 'ABC123',
+                    'bleoid': 'ABC123',
                     'email': 'user1@example.com',
                     'password': make_password('Password123'),
                     'userName': 'TestUser1', 
@@ -112,7 +112,7 @@ class MessageViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'DEF456',
+                    'bleoid': 'DEF456',
                     'email': 'user2@example.com',
                     'password': make_password('Password456'),
                     'userName': 'TestUser2',
@@ -130,7 +130,7 @@ class MessageViewTest(BLEOBaseTest):
                 try:
                     result = self.db_users.insert_one(user)
                     self.user_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test user {i+1}: {user['BLEOId']} / {user['email']}")
+                    print(f"  ✅ Created test user {i+1}: {user['bleoid']} / {user['email']}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test user {i+1}: {str(e)}")
                     raise
@@ -138,8 +138,8 @@ class MessageViewTest(BLEOBaseTest):
             # Create sample links between users
             self.test_links = [
                 {
-                    'BLEOIdPartner1': 'ABC123',
-                    'BLEOIdPartner2': 'DEF456',
+                    'bleoidPartner1': 'ABC123',
+                    'bleoidPartner2': 'DEF456',
                     'status': 'accepted',
                     'created_at': datetime.now()
                 }
@@ -151,7 +151,7 @@ class MessageViewTest(BLEOBaseTest):
                 try:
                     result = self.db_links.insert_one(link)
                     self.link_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test link {i+1} between: {link['BLEOIdPartner1']} and {link['BLEOIdPartner2']}")
+                    print(f"  ✅ Created test link {i+1} between: {link['bleoidPartner1']} and {link['bleoidPartner2']}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test link {i+1}: {str(e)}")
                     raise
@@ -166,8 +166,8 @@ class MessageViewTest(BLEOBaseTest):
             # Update test message days data in setUp method
             self.test_message_days = [
                 {
-                    'fromBLEOId': 'ABC123',
-                    'toBLEOId': 'DEF456',
+                    'from_bleoid': 'ABC123',
+                    'to_bleoid': 'DEF456',
                     'date': yesterday_date,
                     'messages': [
                         {
@@ -190,8 +190,8 @@ class MessageViewTest(BLEOBaseTest):
                     'pleasantness': PleasantnessType.PLEASANT.value
                 },
                 {
-                    'fromBLEOId': 'ABC123',
-                    'toBLEOId': 'DEF456',
+                    'from_bleoid': 'ABC123',
+                    'to_bleoid': 'DEF456',
                     'date': today_date,
                     'messages': [
                         {
@@ -214,8 +214,8 @@ class MessageViewTest(BLEOBaseTest):
                     'pleasantness': PleasantnessType.PLEASANT.value
                 },
                 {
-                    'fromBLEOId': 'DEF456',
-                    'toBLEOId': 'ABC123',
+                    'from_bleoid': 'DEF456',
+                    'to_bleoid': 'ABC123',
                     'date': today_date,
                     'messages': [
                         {
@@ -231,8 +231,8 @@ class MessageViewTest(BLEOBaseTest):
                     'pleasantness': PleasantnessType.PLEASANT.value
                 },
                 {
-                    'fromBLEOId': 'ABC123',
-                    'toBLEOId': 'DEF456',
+                    'from_bleoid': 'ABC123',
+                    'to_bleoid': 'DEF456',
                     'date': week_ago_midnight,
                     'messages': [
                         {
@@ -255,7 +255,7 @@ class MessageViewTest(BLEOBaseTest):
                 try:
                     result = self.db_messages_days.insert_one(message_day)
                     self.message_day_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test message day {i+1} from {message_day['fromBLEOId']} to {message_day['toBLEOId']} on {message_day['date'].strftime('%d-%m-%Y')}")
+                    print(f"  ✅ Created test message day {i+1} from {message_day['from_bleoid']} to {message_day['to_bleoid']} on {message_day['date'].strftime('%d-%m-%Y')}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test message day {i+1}: {str(e)}")
                     raise
@@ -304,7 +304,7 @@ class MessageViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['data']['fromBLEOId'], 'ABC123')
+        self.assertEqual(response.data['data']['from_bleoid'], 'ABC123')
         self.assertEqual(response.data['data']['count'], 5)  # Total 5 messages across 3 dates
         self.assertEqual(response.data['data']['date_count'], 3)  # 3 message days
         
@@ -326,7 +326,7 @@ class MessageViewTest(BLEOBaseTest):
     def test_get_all_messages_for_nonexistent_user(self):
         """Test error when getting messages for nonexistent user"""
         # Make request for nonexistent user
-        response = self.client.get('/messagesdays/NONEXISTENT/messages/')
+        response = self.client.get('/messagesdays/NOP001/messages/')
         
         # Check response
         self.assertEqual(response.status_code, 404)
@@ -339,7 +339,7 @@ class MessageViewTest(BLEOBaseTest):
         """Test getting messages for a user with no message days"""
         # Create a new user without messages
         new_user = {
-            'BLEOId': 'NO_MSGS',
+            'bleoid': 'NOMSGS',
             'email': 'nomessages@example.com',
             'password': make_password('Password123'),
             'userName': 'NoMessages',
@@ -349,7 +349,7 @@ class MessageViewTest(BLEOBaseTest):
         self.db_users.insert_one(new_user)
         
         # Make request
-        response = self.client.get('/messagesdays/NO_MSGS/messages/')
+        response = self.client.get('/messagesdays/NOMSGS/messages/')
         
         # Check response
         self.assertEqual(response.status_code, 404)
@@ -367,7 +367,7 @@ class MessageViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['data']['fromBLEOId'], 'ABC123')
+        self.assertEqual(response.data['data']['from_bleoid'], 'ABC123')
         self.assertEqual(response.data['data']['date'], yesterday_str)
         self.assertEqual(response.data['data']['count'], 2)  # 2 messages on this date
         
@@ -477,8 +477,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Verify in database
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         self.assertEqual(len(message_day['messages']), 3)
@@ -593,8 +593,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Verify in database
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         
@@ -698,8 +698,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Verify in database
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         self.assertEqual(len(message_day['messages']), 2)
@@ -736,8 +736,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Original messages should be unchanged
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         self.assertEqual(len(message_day['messages']), 2)
@@ -765,8 +765,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Verify in database
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         self.assertEqual(len(message_day['messages']), 1)
@@ -798,8 +798,8 @@ class MessageViewTest(BLEOBaseTest):
         
         # Verify in database
         message_day = self.db_messages_days.find_one({
-            "fromBLEOId": "ABC123",
-            "toBLEOId": "DEF456",
+            "from_bleoid": "ABC123",
+            "to_bleoid": "DEF456",
             "date": datetime(datetime.now().year, datetime.now().month, datetime.now().day) - timedelta(days=1)
         })
         self.assertEqual(len(message_day['messages']), 0)

@@ -15,7 +15,7 @@ class ParameterManager:
             # Ensure MongoDB is initialized
             if not MongoDB._initialized:
                 print("⚠️ MongoDB not initialized, using default debug level")
-                return DebugType.DEBUG.value
+                return DebugType.NO_DEBUG.value
                 
             db = MongoDB.get_instance().get_collection('AppParameters')
             

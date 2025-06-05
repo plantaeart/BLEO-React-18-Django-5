@@ -13,6 +13,7 @@ import os
 from dotenv import load_dotenv
 from utils.jwt_utils import setup_jwt_secret
 import uuid
+from utils.privacy_utils import PrivacyUtils
 
 load_dotenv()
 
@@ -46,7 +47,7 @@ class CustomTokenObtainPairView(APIView):
             password = request.data.get('password')
             
             # Mask email for logging
-            masked_email = self._mask_email(email) if email else "missing-email"
+            masked_email = PrivacyUtils.mask_email(email) if email else "missing-email"
             
             if not email or not password:
                 # Log validation error
@@ -90,7 +91,7 @@ class CustomTokenObtainPairView(APIView):
                 Logger.debug_error(
                     f"Authentication failed: Invalid password for {masked_email}",
                     401,
-                    user['BLEOId'],
+                    user['bleoid'],
                     ErrorSourceType.SERVER.value
                 )
                 
@@ -98,7 +99,7 @@ class CustomTokenObtainPairView(APIView):
                     message="Invalid credentials"
                 ).to_response(status.HTTP_401_UNAUTHORIZED)
             
-            bleoid = user['BLEOId']
+            bleoid = user['bleoid']
             
             # Create tokens with proper timestamp handling
             now = datetime.now(timezone.utc)
@@ -171,8 +172,6 @@ class CustomTokenObtainPairView(APIView):
             return BLEOResponse.server_error(
                 message=f"Authentication failed: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _mask_email(self, email):
         """Mask email for logging purposes"""
         try:
             if not email or '@' not in email:
@@ -237,7 +236,7 @@ class TokenRefreshView(APIView):
                 
                 bleoid = payload.get('bleoid')
                 email = payload.get('email')
-                masked_email = self._mask_email(email) if email else "unknown-email"
+                masked_email = PrivacyUtils.mask_email(email) if email else "unknown-email"
                 
                 # Log token validated
                 Logger.debug_user_action(
@@ -328,34 +327,3 @@ class TokenRefreshView(APIView):
             return BLEOResponse.server_error(
                 message=f"Token refresh failed: {str(e)}"
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _mask_email(self, email):
-        """Mask email for logging purposes"""
-        try:
-            if not email or '@' not in email:
-                return "invalid-email"
-                
-            parts = email.split('@')
-            username = parts[0]
-            domain = parts[1]
-            
-            # Handle different username lengths
-            if len(username) == 1:
-                # Single character: don't mask
-                masked_username = username
-            elif len(username) == 2:
-                # Two characters: mask second character
-                masked_username = username[0] + '*'
-            elif len(username) == 3:
-                # Three characters: first + asterisk + last
-                masked_username = username[0] + '*' + username[-1]
-            elif len(username) == 4:
-                # Four characters: first two + asterisk + last
-                masked_username = username[0:2] + '*' + username[-1]
-            else:
-                # Five or more characters: first two + two asterisks + last
-                masked_username = username[0:2] + '**' + username[-1]
-                
-            return f"{masked_username}@{domain}"
-        except:
-            return "invalid-email"

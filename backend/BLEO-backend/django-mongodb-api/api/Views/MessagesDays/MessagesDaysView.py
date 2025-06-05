@@ -13,6 +13,8 @@ from models.enums.PleasantnessType import PleasantnessType
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
+from utils.validation_utils import validate_url_bleoid
+from rest_framework.exceptions import ValidationError
 
 def _generate_message_ids(messages):
     """Generate IDs for messages that don't have them"""
@@ -51,7 +53,7 @@ def _add_quadrant_info(self, message_day):
 def _validate_user_link(from_bleoid):
     """
     Validate that the user is linked with someone.
-    Returns the linked partner's BLEOId if valid, None otherwise.
+    Returns the linked partner's bleoid if valid, None otherwise.
     """
     try:
         # Get the Links collection
@@ -60,8 +62,8 @@ def _validate_user_link(from_bleoid):
         # Check for an accepted link where the user is either partner1 or partner2
         link = db_links.find_one({
             "$or": [
-                {"BLEOIdPartner1": from_bleoid},
-                {"BLEOIdPartner2": from_bleoid}
+                {"bleoidPartner1": from_bleoid},
+                {"bleoidPartner2": from_bleoid}
             ],
             "status": "accepted"
         })
@@ -70,20 +72,74 @@ def _validate_user_link(from_bleoid):
             return None
         
         # Determine which partner is the linked user
-        if link["BLEOIdPartner1"] == from_bleoid:
-            return link["BLEOIdPartner2"]
+        if link["bleoidPartner1"] == from_bleoid:
+            return link["bleoidPartner2"]
         else:
-            return link["BLEOIdPartner1"]
+            return link["bleoidPartner1"]
             
     except Exception as e:
         print(f"Error validating user link: {str(e)}")
         return None
 
+def _find_partner_from_link(from_bleoid):
+    """
+    Find the partner's bleoid from an accepted link.
+    Returns the partner's bleoid if found, None otherwise.
+    """
+    try:
+        # Get the Links collection
+        db_links = MongoDB.get_instance().get_collection('Links')
+        
+        # Find accepted link where user is either partner1 or partner2
+        link = db_links.find_one({
+            "$or": [
+                {"bleoidPartner1": from_bleoid},
+                {"bleoidPartner2": from_bleoid}
+            ],
+            "status": "accepted"
+        })
+        
+        if not link:
+            return None
+        
+        # Return the other partner's bleoid
+        if link["bleoidPartner1"] == from_bleoid:
+            return link["bleoidPartner2"]
+        else:
+            return link["bleoidPartner1"]
+            
+    except Exception as e:
+        Logger.debug_error(
+            f"Error finding partner from link for {from_bleoid}: {str(e)}",
+            500,
+            from_bleoid,
+            ErrorSourceType.SERVER.value
+        )
+        return None
+
+def _validate_link_between_users(from_bleoid, to_bleoid):
+    """
+    Validate that an accepted link exists between two users.
+    Returns True if valid link exists, False otherwise.
+    """
+    try:
+        db_links = MongoDB.get_instance().get_collection('Links')
+        link = db_links.find_one({
+            "$or": [
+                {"bleoidPartner1": from_bleoid, "bleoidPartner2": to_bleoid},
+                {"bleoidPartner1": to_bleoid, "bleoidPartner2": from_bleoid}
+            ],
+            "status": "accepted"
+        })
+        return link is not None
+    except Exception:
+        return False
+
 class MessageDayListCreateView(APIView):
     """API view for listing and creating message days"""
 
     def get(self, request):
-        """Get message days with optional filtering by fromBLEOId, toBLEOId, date, or mood"""
+        """Get message days with optional filtering by from_bleoid, to_bleoid, date, or mood"""
         try:
             # Log request
             Logger.debug_system_action(
@@ -100,14 +156,24 @@ class MessageDayListCreateView(APIView):
             energy_level = request.query_params.get('energy_level')
             pleasantness = request.query_params.get('pleasantness')
             
-            # Build filter criteria
-            filter_criteria = {}
+            # Validate BLEOIDs if provided
+            validated_from_bleoid = None
+            validated_to_bleoid = None
             
             if from_bleoid:
-                filter_criteria['fromBLEOId'] = from_bleoid
-                
+                validated_from_bleoid = validate_url_bleoid(from_bleoid, "fromBleoid")
+            
             if to_bleoid:
-                filter_criteria['toBLEOId'] = to_bleoid
+                validated_to_bleoid = validate_url_bleoid(to_bleoid, "toBleoid")
+            
+            # Build filter criteria using validated BLEOIDs
+            filter_criteria = {}
+            
+            if validated_from_bleoid:
+                filter_criteria['from_bleoid'] = validated_from_bleoid
+                
+            if validated_to_bleoid:
+                filter_criteria['to_bleoid'] = validated_to_bleoid
             
             # Single date filtering
             if date:
@@ -168,6 +234,16 @@ class MessageDayListCreateView(APIView):
                 message="Messages days retrieved successfully"
             ).to_response()
             
+        except ValidationError as e:
+            Logger.debug_error(
+                f"Invalid BLEOID format in query parameters - {str(e)}",
+                400,
+                None,
+                ErrorSourceType.SERVER.value
+            )
+            return BLEOResponse.validation_error(
+                message=f"Invalid BLEOID format in query parameters"
+            ).to_response(status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             # Log error
             Logger.debug_error(
@@ -184,80 +260,55 @@ class MessageDayListCreateView(APIView):
     def post(self, request):
         """Create a new message day"""
         try:
-            # Get fromBLEOId from request data or query params
-            from_bleoid = request.data.get('fromBLEOId') or request.query_params.get('fromBleoid')
-            
-            # Log request
-            Logger.debug_system_action(
-                f"Creating new message day for user {from_bleoid}",
-                LogType.INFO.value,
-                200
-            )
-            
-            # Check if date is provided in request data if not initialize to today
-            if 'date' not in request.data:
-                now = datetime.now()
-                request.data['date'] = now.strftime('%d-%m-%Y')
-        
-            # Ensure fromBLEOId is provided in request data
-            if 'fromBLEOId' not in request.data:
-                from_bleoid = request.query_params.get('fromBleoid')
-                if not from_bleoid:
-                    return BLEOResponse.validation_error(
-                        message="fromBLEOId is required"
-                    ).to_response(status.HTTP_400_BAD_REQUEST)
-                request.data['fromBLEOId'] = from_bleoid
-
-            # Validate with serializer
-            serializer = MessagesDaysSerializer(data=request.data, partial=True)
+            serializer = MessagesDaysSerializer(data=request.data)
             if not serializer.is_valid():
-                # If validation fails, log error
                 Logger.debug_error(
-                    f"Invalid message day data: {serializer.errors}",
+                    f"MessageDays creation validation failed: {serializer.errors}",
                     400,
-                    from_bleoid,
+                    request.data.get('from_bleoid'),
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.validation_error(
-                    message="Invalid data",
+                    message="Validation failed",
                     errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
-            
+        
             validated_data = serializer.validated_data
-            from_bleoid = validated_data.get('fromBLEOId')
-            
-            # Check if user exists
+            from_bleoid = validated_data['from_bleoid']
+        
+            # STEP 1: Check if from_user exists FIRST
             db_users = MongoDB.get_instance().get_collection('Users')
-            user = db_users.find_one({"BLEOId": from_bleoid})
+            from_user = db_users.find_one({"bleoid": from_bleoid})
             
-            if not user:
+            if not from_user:
                 Logger.debug_error(
-                    f"User with BLEOId {from_bleoid} not found when creating message day",
+                    f"User with bleoid {from_bleoid} not found",
                     404,
-                    None,
+                    from_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"User with BLEOId {from_bleoid} not found"
+                    message=f"User with bleoid {from_bleoid} not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
-            
-            # NEW: Check if user is linked with someone
-            to_bleoid = None
-            if 'toBLEOId' in validated_data:
-                # If toBLEOId is provided, validate it's actually linked to this user
-                to_bleoid = validated_data.get('toBLEOId')
+
+            # STEP 2: Handle to_bleoid - either provided or auto-discover
+            to_bleoid = validated_data.get('to_bleoid')
+            if to_bleoid:
+                # STEP 3: Check if provided to_bleoid user exists BEFORE checking link
+                to_user = db_users.find_one({"bleoid": to_bleoid})
+                if not to_user:
+                    Logger.debug_error(
+                        f"Partner with bleoid {to_bleoid} not found",
+                        404,
+                        from_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    return BLEOResponse.not_found(
+                        message=f"Partner with bleoid {to_bleoid} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
                 
-                # Check if a valid link exists between these users
-                db_links = MongoDB.get_instance().get_collection('Links')
-                link = db_links.find_one({
-                    "$or": [
-                        {"BLEOIdPartner1": from_bleoid, "BLEOIdPartner2": to_bleoid},
-                        {"BLEOIdPartner1": to_bleoid, "BLEOIdPartner2": from_bleoid}
-                    ],
-                    "status": "accepted"
-                })
-                
-                if not link:
+                # STEP 4: Now check if valid link exists between these existing users
+                if not _validate_link_between_users(from_bleoid, to_bleoid):
                     Logger.debug_error(
                         f"No accepted link found between {from_bleoid} and {to_bleoid}",
                         403,
@@ -269,9 +320,9 @@ class MessageDayListCreateView(APIView):
                         error_message=f"No accepted link found between {from_bleoid} and {to_bleoid}"
                     ).to_response(status.HTTP_403_FORBIDDEN)
             else:
-                # If toBLEOId is not provided, find the linked partner
-                to_bleoid = _validate_user_link(from_bleoid)
-                
+                # STEP 5: Auto-discover to_bleoid from link
+                to_bleoid = _find_partner_from_link(from_bleoid)
+        
                 if not to_bleoid:
                     Logger.debug_error(
                         f"User {from_bleoid} is not linked with any partner",
@@ -283,19 +334,35 @@ class MessageDayListCreateView(APIView):
                         error_type="ValidationError", 
                         error_message=f"User {from_bleoid} is not linked with any partner"
                     ).to_response(status.HTTP_403_FORBIDDEN)
-            
-            # Add the toBLEOId to validated data
-            validated_data['toBLEOId'] = to_bleoid
         
+                # STEP 6: Check if discovered partner user exists
+                to_user = db_users.find_one({"bleoid": to_bleoid})
+                if not to_user:
+                    Logger.debug_error(
+                        f"Linked partner with bleoid {to_bleoid} not found in database",
+                        404,
+                        from_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    return BLEOResponse.not_found(
+                        message=f"Linked partner with bleoid {to_bleoid} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
+        
+            # Continue with existing logic for date handling and creation...
+            # Set default date if not provided
+            if 'date' not in request.data:
+                now = datetime.now()
+                request.data['date'] = now.strftime('%d-%m-%Y')
+
             # Get current date and set time to midnight
             now = datetime.now()
             message_date = datetime(now.year, now.month, now.day)
             
-            # Check if entry already exists for this user and date using exact date match
+            # Check if entry already exists for this user and date
             db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             existing_entry = db_message_days.find_one({
-                "fromBLEOId": from_bleoid,
-                "toBLEOId": to_bleoid,
+                "from_bleoid": from_bleoid,
+                "to_bleoid": to_bleoid,
                 "date": message_date
             })
             
@@ -308,17 +375,17 @@ class MessageDayListCreateView(APIView):
                 )
                 return BLEOResponse.error(
                     error_type="DuplicateError",
-                    error_message=f"Message day already exists for fromBLEOId {from_bleoid} to toBLEOId {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
+                    error_message=f"Message day already exists for {from_bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
                 ).to_response(status.HTTP_409_CONFLICT)
-            
+        
             # Process messages - generate IDs
             messages = validated_data.get('messages', [])
             processed_messages = _generate_message_ids(messages)
             
-            # Create MessagesDays instance with midnight date
+            # Create MessagesDays instance
             message_day = MessagesDays(
-                fromBLEOId=from_bleoid,
-                toBLEOId=to_bleoid,
+                from_bleoid=from_bleoid,
+                to_bleoid=to_bleoid,
                 date=message_date,
                 messages=processed_messages,
                 mood=validated_data.get('mood'),
@@ -329,7 +396,7 @@ class MessageDayListCreateView(APIView):
             # Save to MongoDB
             result = db_message_days.insert_one(message_day.to_dict())
             
-            # Return created message day with ID
+            # Return created message day
             created_message_day = message_day.to_dict()
             created_message_day['_id'] = str(result.inserted_id)
             
@@ -343,10 +410,10 @@ class MessageDayListCreateView(APIView):
             # Use serializer for response
             response_serializer = MessagesDaysSerializer(created_message_day)
             
-            # Log success (without logging message content)
+            # Log success
             Logger.debug_user_action(
                 from_bleoid,
-                f"Message day created successfully with {len(processed_messages)} messages",
+                f"Message day created successfully to {to_bleoid} with {len(processed_messages)} messages",
                 LogType.SUCCESS.value,
                 201
             )
@@ -359,9 +426,9 @@ class MessageDayListCreateView(APIView):
         except Exception as e:
             # Log error
             Logger.debug_error(
-                f"Failed to create message day for {from_bleoid}: {str(e)}",
+                f"Failed to create message day: {str(e)}",
                 500,
-                from_bleoid,
+                request.data.get('from_bleoid'),
                 ErrorSourceType.SERVER.value
             )
             
@@ -370,7 +437,7 @@ class MessageDayListCreateView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, bleoid):
-        """Delete all message days for a specific fromBLEOId"""
+        """Delete all message days for a specific from_bleoid"""
         try:
             # Log request
             Logger.debug_system_action(
@@ -379,40 +446,43 @@ class MessageDayListCreateView(APIView):
                 200
             )
             
+            # Validate BLEOID from URL parameter
+            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
-            user = db_users.find_one({"BLEOId": bleoid})
+            user = db_users.find_one({"bleoid": validated_bleoid})
             
             if not user:
                 Logger.debug_error(
-                    f"User with BLEOId {bleoid} not found when deleting message days",
+                    f"User with bleoid {validated_bleoid} not found when deleting message days",
                     404,
                     None,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"User with BLEOId {bleoid} not found"
+                    message=f"User with bleoid {validated_bleoid} not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Delete all message days for this user
             db = MongoDB.get_instance().get_collection('MessagesDays')
-            result = db.delete_many({"fromBLEOId": bleoid})
+            result = db.delete_many({"from_bleoid": validated_bleoid})
             
             # Log no message days found
             if result.deleted_count == 0:
                 Logger.debug_error(
-                    f"No message days found for BLEOId={bleoid} during bulk delete",
+                    f"No message days found for bleoid={validated_bleoid} during bulk delete",
                     404,
-                    bleoid,
+                    validated_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"No message days found for fromBLEOId={bleoid}"
+                    message=f"No message days found for from_bleoid={validated_bleoid}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Log success
             Logger.debug_user_action(
-                bleoid,
+                validated_bleoid,
                 f"Successfully deleted {result.deleted_count} message day(s)",
                 LogType.SUCCESS.value,
                 200
@@ -420,7 +490,7 @@ class MessageDayListCreateView(APIView):
             
             return BLEOResponse.success(
                 data={"deleted_count": result.deleted_count},
-                message=f"Successfully deleted {result.deleted_count} message day(s) for fromBLEOId={bleoid}"
+                message=f"Successfully deleted {result.deleted_count} message day(s) for from_bleoid={validated_bleoid}"
             ).to_response(status.HTTP_200_OK)
             
         except Exception as e:
@@ -527,113 +597,122 @@ class MoodOptionsView(APIView):
 
 
 class MessageDayCreateView(APIView):
-    """API view for creating message days with fromBLEOId in URL path"""
+    """API view for creating message days with from_bleoid in URL path"""
     
     def post(self, request, bleoid):
-        """Create a new message day with fromBLEOId from URL path"""
+        """Create a new message day with from_bleoid from URL path"""
         try:
-            # Log request
-            Logger.debug_user_action(
-                bleoid,
-                "Creating new message day via path parameter",
-                LogType.INFO.value,
-                200
-            )
+            # Validate BLEOID from URL parameter
+            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
             
+            # Add validated bleoid to request data
             data = request.data.copy()
-
-            # Add fromBLEOId from URL to data
-            data['fromBLEOId'] = bleoid
+            data['from_bleoid'] = validated_bleoid
             
             # Check if date is provided, if not initialize to today
             if 'date' not in data:
                 now = datetime.now()
                 data['date'] = now.strftime('%d-%m-%Y')
 
-            # NEW: Check if user is linked with someone
+            # STEP 1: Check if from_user exists FIRST
+            db_users = MongoDB.get_instance().get_collection('Users')
+            from_user = db_users.find_one({"bleoid": validated_bleoid})
+            
+            if not from_user:
+                Logger.debug_error(
+                    f"User with bleoid {validated_bleoid} not found",
+                    404,
+                    validated_bleoid,
+                    ErrorSourceType.SERVER.value
+                )
+                return BLEOResponse.not_found(
+                    message=f"User with bleoid {validated_bleoid} not found"
+                ).to_response(status.HTTP_404_NOT_FOUND)
+
+            # STEP 2: Check if to_bleoid is provided and validate the user exists
             to_bleoid = None
-            if 'toBLEOId' in data:
-                # If toBLEOId is provided, validate it's actually linked to this user
-                to_bleoid = data['toBLEOId']
+            if 'to_bleoid' in data:
+                to_bleoid = data['to_bleoid']
                 
-                # Check if a valid link exists between these users
+                # Check if to_user exists
+                to_user = db_users.find_one({"bleoid": to_bleoid})
+                if not to_user:
+                    Logger.debug_error(
+                        f"Partner with bleoid {to_bleoid} not found",
+                        404,
+                        validated_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    return BLEOResponse.not_found(
+                        message=f"Partner with bleoid {to_bleoid} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
+                
+                # STEP 3: Now check if a valid link exists between these users
                 db_links = MongoDB.get_instance().get_collection('Links')
                 link = db_links.find_one({
                     "$or": [
-                        {"BLEOIdPartner1": bleoid, "BLEOIdPartner2": to_bleoid},
-                        {"BLEOIdPartner1": to_bleoid, "BLEOIdPartner2": bleoid}
+                        {"bleoidPartner1": validated_bleoid, "bleoidPartner2": to_bleoid},
+                        {"bleoidPartner1": to_bleoid, "bleoidPartner2": validated_bleoid}
                     ],
                     "status": "accepted"
                 })
                 
                 if not link:
                     Logger.debug_error(
-                        f"No accepted link found between {bleoid} and {to_bleoid}",
+                        f"No accepted link found between {validated_bleoid} and {to_bleoid}",
                         403,
-                        bleoid,
+                        validated_bleoid,
                         ErrorSourceType.SERVER.value
                     )
                     return BLEOResponse.error(
                         error_type="ValidationError",
-                        error_message=f"No accepted link found between {bleoid} and {to_bleoid}"
+                        error_message=f"No accepted link found between {validated_bleoid} and {to_bleoid}"
                     ).to_response(status.HTTP_403_FORBIDDEN)
             else:
-                # If toBLEOId is not provided, find the linked partner
-                to_bleoid = _validate_user_link(bleoid)
+                # STEP 4: If to_bleoid is not provided, find the linked partner
+                to_bleoid = _validate_user_link(validated_bleoid)
                 
                 if not to_bleoid:
                     Logger.debug_error(
-                        f"User {bleoid} is not linked with any partner",
+                        f"User {validated_bleoid} is not linked with any partner",
                         403,
-                        bleoid,
+                        validated_bleoid,
                         ErrorSourceType.SERVER.value
                     )
                     return BLEOResponse.error(
                         error_type="ValidationError", 
-                        error_message=f"User {bleoid} is not linked with any partner"
+                        error_message=f"User {validated_bleoid} is not linked with any partner"
                     ).to_response(status.HTTP_403_FORBIDDEN)
                 
-                # Add the toBLEOId to the data
-                data['toBLEOId'] = to_bleoid
-
+                # STEP 5: Check if the discovered partner user exists
+                to_user = db_users.find_one({"bleoid": to_bleoid})
+                if not to_user:
+                    Logger.debug_error(
+                        f"Linked partner with bleoid {to_bleoid} not found in database",
+                        404,
+                        validated_bleoid,
+                        ErrorSourceType.SERVER.value
+                    )
+                    return BLEOResponse.not_found(
+                        message=f"Linked partner with bleoid {to_bleoid} not found"
+                    ).to_response(status.HTTP_404_NOT_FOUND)
+            
             # Validate with serializer
             serializer = MessagesDaysSerializer(data=data)
             if not serializer.is_valid():
                 Logger.debug_error(
                     f"Invalid message day data: {serializer.errors}",
                     400,
-                    bleoid,
+                    validated_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.validation_error(
                     message="Invalid data",
                     errors=serializer.errors
                 ).to_response(status.HTTP_400_BAD_REQUEST)
-            
+        
             # Get validated data
             validated_data = serializer.validated_data
-            
-            # Check if user exists
-            db_users = MongoDB.get_instance().get_collection('Users')
-            user = db_users.find_one({"BLEOId": bleoid})
-            
-            if not user:
-                Logger.debug_error(
-                    f"User with BLEOId {bleoid} not found when creating message day",
-                    404,
-                    None,
-                    ErrorSourceType.SERVER.value
-                )
-                return BLEOResponse.not_found(
-                    message=f"User with BLEOId {bleoid} not found"
-                ).to_response(status.HTTP_404_NOT_FOUND)
-            
-            # Check if partner exists
-            partner = db_users.find_one({"BLEOId": to_bleoid})
-            if not partner:
-                return BLEOResponse.not_found(
-                    message=f"Partner with BLEOId {to_bleoid} not found"
-                ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Get current date and set time to midnight
             now = datetime.now()
@@ -642,31 +721,31 @@ class MessageDayCreateView(APIView):
             # Check if entry already exists for this user, partner, and date
             db_message_days = MongoDB.get_instance().get_collection('MessagesDays')
             existing_entry = db_message_days.find_one({
-                "fromBLEOId": bleoid,
-                "toBLEOId": to_bleoid,
+                "from_bleoid": validated_bleoid,
+                "to_bleoid": to_bleoid,
                 "date": message_date
             })
             
             if existing_entry:
                 Logger.debug_error(
-                    f"Message day already exists for {bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}",
+                    f"Message day already exists for {validated_bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}",
                     409,
-                    bleoid,
+                    validated_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.error(
                     error_type="DuplicateError",
-                    error_message=f"Message day already exists for fromBLEOId {bleoid} to toBLEOId {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
+                    error_message=f"Message day already exists for from_bleoid {validated_bleoid} to to_bleoid {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
                 ).to_response(status.HTTP_409_CONFLICT)
-            
+        
             # Process messages - generate IDs
             messages = validated_data.get('messages', [])
             processed_messages = _generate_message_ids(messages)
             
             # Create MessagesDays instance with midnight date
             message_day = MessagesDays(
-                fromBLEOId=bleoid,
-                toBLEOId=to_bleoid,
+                from_bleoid=validated_bleoid,  #  Use correct parameter names
+                to_bleoid=to_bleoid,
                 date=message_date,
                 messages=processed_messages,
                 mood=validated_data.get('mood'),
@@ -691,6 +770,14 @@ class MessageDayCreateView(APIView):
             # Use serializer for response
             response_serializer = MessagesDaysSerializer(created_message_day)
             
+            # Log success
+            Logger.debug_user_action(
+                validated_bleoid,
+                f"Message day created successfully to {to_bleoid} with {len(processed_messages)} messages",
+                LogType.SUCCESS.value,
+                201
+            )
+            
             return BLEOResponse.success(
                 data=response_serializer.data,
                 message="Message day created successfully"
@@ -710,7 +797,7 @@ class MessageDayCreateView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, bleoid):
-        """Delete all message days for a specific fromBLEOId"""
+        """Delete all message days for a specific from_bleoid"""
         try:
             # Log request
             Logger.debug_system_action(
@@ -719,40 +806,43 @@ class MessageDayCreateView(APIView):
                 200
             )
             
+            # Validate BLEOID from URL parameter
+            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
-            user = db_users.find_one({"BLEOId": bleoid})
+            user = db_users.find_one({"bleoid": validated_bleoid})
             
             if not user:
                 Logger.debug_error(
-                    f"User with BLEOId {bleoid} not found when deleting message days",
+                    f"User with bleoid {validated_bleoid} not found when deleting message days",
                     404,
                     None,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"User with BLEOId {bleoid} not found"
+                    message=f"User with bleoid {validated_bleoid} not found"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Delete all message days for this user
             db = MongoDB.get_instance().get_collection('MessagesDays')
-            result = db.delete_many({"fromBLEOId": bleoid})
+            result = db.delete_many({"from_bleoid": validated_bleoid})
             
             # Log no message days found
             if result.deleted_count == 0:
                 Logger.debug_error(
-                    f"No message days found for BLEOId={bleoid} during bulk delete",
+                    f"No message days found for bleoid={validated_bleoid} during bulk delete",
                     404,
-                    bleoid,
+                    validated_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"No message days found for fromBLEOId={bleoid}"
+                    message=f"No message days found for from_bleoid={validated_bleoid}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Log success
             Logger.debug_user_action(
-                bleoid,
+                validated_bleoid,
                 f"Successfully deleted {result.deleted_count} message day(s)",
                 LogType.SUCCESS.value,
                 200
@@ -760,7 +850,7 @@ class MessageDayCreateView(APIView):
             
             return BLEOResponse.success(
                 data={"deleted_count": result.deleted_count},
-                message=f"Successfully deleted {result.deleted_count} message day(s) for fromBLEOId={bleoid}"
+                message=f"Successfully deleted {result.deleted_count} message day(s) for from_bleoid={validated_bleoid}"
             ).to_response(status.HTTP_200_OK)
             
         except Exception as e:
@@ -780,7 +870,7 @@ class MessageDayDetailView(APIView):
     """API view for getting, updating and deleting a message day by bleoid and date"""
     
     def get_by_bleoid_and_date(self, bleoid, date):
-        """Get message day by BLEOId and date"""
+        """Get message day by bleoid and date"""
         try:
             # No type conversion needed for bleoid anymore since it's a string
             date_obj = datetime.strptime(date, '%d-%m-%Y')
@@ -790,18 +880,18 @@ class MessageDayDetailView(APIView):
             
             db = MongoDB.get_instance().get_collection('MessagesDays')
             return db.find_one({
-                "fromBLEOId": bleoid,
+                "from_bleoid": bleoid,
                 "date": message_date
             })
         except ValueError:
             return None
     
     def get(self, request, bleoid=None, date=None):
-        """Get message days by BLEOId, date, or both"""
+        """Get message days by bleoid, date, or both"""
         try:
             # Log request
             Logger.debug_system_action(
-                f"Getting message day(s) - BLEOId: {bleoid}, Date: {date}",
+                f"Getting message day(s) - bleoid: {bleoid}, Date: {date}",
                 LogType.INFO.value,
                 200
             )
@@ -811,13 +901,13 @@ class MessageDayDetailView(APIView):
                 message_day = self.get_by_bleoid_and_date(bleoid, date)
                 if not message_day:
                     Logger.debug_error(
-                        f"No message day found for BLEOId={bleoid} on date {date}",
+                        f"No message day found for bleoid={bleoid} on date {date}",
                         404,
                         bleoid,
                         ErrorSourceType.SERVER.value
                     )
                     return BLEOResponse.not_found(
-                        message=f"No message day found for BLEOId={bleoid} on date {date}"
+                        message=f"No message day found for bleoid={bleoid} on date {date}"
                     ).to_response(status.HTTP_404_NOT_FOUND)
                 
                 # Convert ObjectId to string
@@ -847,19 +937,19 @@ class MessageDayDetailView(APIView):
                 ).to_response()
             
             elif bleoid:
-                # All message days for a specific BLEOId
+                # All message days for a specific bleoid
                 db = MongoDB.get_instance().get_collection('MessagesDays')
-                message_days = list(db.find({"fromBLEOId": bleoid}))
+                message_days = list(db.find({"from_bleoid": bleoid}))
                 
                 if not message_days:
                     Logger.debug_error(
-                        f"No message days found for BLEOId={bleoid}",
+                        f"No message days found for bleoid={bleoid}",
                         404,
                         bleoid,
                         ErrorSourceType.SERVER.value
                     )
                     return BLEOResponse.not_found(
-                        message=f"No message days found for BLEOId={bleoid}"
+                        message=f"No message days found for bleoid={bleoid}"
                     ).to_response(status.HTTP_404_NOT_FOUND)
             
             elif date:
@@ -908,7 +998,7 @@ class MessageDayDetailView(APIView):
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.validation_error(
-                    message="BLEOId or date is required"
+                    message="bleoid or date is required"
                 ).to_response(status.HTTP_400_BAD_REQUEST)
             
             # Process message days for response
@@ -926,7 +1016,7 @@ class MessageDayDetailView(APIView):
             # Log success
             Logger.debug_system_action(
                 f"Retrieved {len(message_days)} message days" +
-                (f" for BLEOId={bleoid}" if bleoid else "") +
+                (f" for bleoid={bleoid}" if bleoid else "") +
                 (f" on date {date}" if date else ""),
                 LogType.SUCCESS.value,
                 200
@@ -951,11 +1041,11 @@ class MessageDayDetailView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def put(self, request, bleoid, date):
-        """Update a message day by BLEOId and date"""
+        """Update a message day by bleoid and date"""
         try:
             # Log request
             Logger.debug_system_action(
-                f"Updating message day for BLEOId={bleoid} on date {date}",
+                f"Updating message day for bleoid={bleoid} on date {date}",
                 LogType.INFO.value,
                 200
             )
@@ -964,13 +1054,13 @@ class MessageDayDetailView(APIView):
             message_day = self.get_by_bleoid_and_date(bleoid, date)
             if not message_day:
                 Logger.debug_error(
-                    f"No message day found for BLEOId={bleoid} on date {date} during update",
+                    f"No message day found for bleoid={bleoid} on date {date} during update",
                     404,
                     bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"No message day found for BLEOId={bleoid} on date {date}"
+                    message=f"No message day found for bleoid={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Get request data
@@ -992,9 +1082,9 @@ class MessageDayDetailView(APIView):
                 
             validated_data = serializer.validated_data
             
-            # Don't allow changing fromBLEOId or date
-            if 'fromBLEOId' in validated_data:
-                del validated_data['fromBLEOId']
+            # Don't allow changing from_bleoid or date
+            if 'from_bleoid' in validated_data:
+                del validated_data['from_bleoid']
                 
             if 'date' in validated_data:
                 del validated_data['date']
@@ -1012,7 +1102,7 @@ class MessageDayDetailView(APIView):
             
             if result.modified_count == 0:
                 Logger.debug_system_action(
-                    f"No changes made to message day for BLEOId={bleoid} on date {date}",
+                    f"No changes made to message day for bleoid={bleoid} on date {date}",
                     LogType.INFO.value,
                     200
                 )
@@ -1051,7 +1141,7 @@ class MessageDayDetailView(APIView):
         except Exception as e:
             # Log error
             Logger.debug_error(
-                f"Failed to update message day for BLEOId={bleoid} on date {date}: {str(e)}",
+                f"Failed to update message day for bleoid={bleoid} on date {date}: {str(e)}",
                 500,
                 bleoid,
                 ErrorSourceType.SERVER.value
@@ -1062,11 +1152,11 @@ class MessageDayDetailView(APIView):
             ).to_response(status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def delete(self, request, bleoid, date):
-        """Delete a message day by BLEOId and date"""
+        """Delete a message day by bleoid and date"""
         try:
             # Log request
             Logger.debug_system_action(
-                f"Deleting message day for BLEOId={bleoid} on date {date}",
+                f"Deleting message day for bleoid={bleoid} on date {date}",
                 LogType.INFO.value,
                 200
             )
@@ -1074,13 +1164,13 @@ class MessageDayDetailView(APIView):
             message_day = self.get_by_bleoid_and_date(bleoid, date)
             if not message_day:
                 Logger.debug_error(
-                    f"No message day found for BLEOId={bleoid} on date {date} during deletion",
+                    f"No message day found for bleoid={bleoid} on date {date} during deletion",
                     404,
                     bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.not_found(
-                    message=f"No message day found for BLEOId={bleoid} on date {date}"
+                    message=f"No message day found for bleoid={bleoid} on date {date}"
                 ).to_response(status.HTTP_404_NOT_FOUND)
             
             # Delete from database
@@ -1102,7 +1192,7 @@ class MessageDayDetailView(APIView):
         except Exception as e:
             # Log error
             Logger.debug_error(
-                f"Failed to delete message day for BLEOId={bleoid} on date {date}: {str(e)}",
+                f"Failed to delete message day for bleoid={bleoid} on date {date}: {str(e)}",
                 500,
                 bleoid,
                 ErrorSourceType.SERVER.value

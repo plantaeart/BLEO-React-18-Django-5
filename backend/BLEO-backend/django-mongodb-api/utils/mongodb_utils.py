@@ -9,6 +9,7 @@ from .mongodb_schemas import (
     MESSAGE_DAY_SCHEMA, 
     PASSWORD_RESET_SCHEMA, 
     TOKEN_BLACKLIST_SCHEMA,
+    EMAIL_VERIFICATION_SCHEMA,
     DEBUG_LOGS_SCHEMA,
     APP_PARAMETERS_SCHEMA
 )
@@ -22,7 +23,7 @@ class MongoDB:
     _instance = None
     _client = None
     _db = None
-    _initialized = False  # Track if system has been initialized
+    _initialized = False
     
     # Collection mapping dictionary
     COLLECTIONS = {
@@ -31,6 +32,7 @@ class MongoDB:
         'MessagesDays': 'MessagesDays',
         'PasswordResets': 'PasswordResets',
         'TokenBlacklist': 'TokenBlacklist',
+        'EmailVerifications': 'EmailVerifications',
         'DebugLogs': 'DebugLogs',
         'AppParameters': 'AppParameters'
     }
@@ -169,13 +171,14 @@ class MongoDB:
     def setup_collection(self, collection_name, create=False, verbose=False):
         """Setup MongoDB collection with schema validation"""
         try:
-            # Map collection name to schema
+            # Map collection name to schema - ADD EmailVerifications
             schema_mapping = {
                 self.COLLECTIONS['Users']: USER_SCHEMA,
                 self.COLLECTIONS['Links']: LINK_SCHEMA,
                 self.COLLECTIONS['MessagesDays']: MESSAGE_DAY_SCHEMA,
                 self.COLLECTIONS['PasswordResets']: PASSWORD_RESET_SCHEMA,
                 self.COLLECTIONS['TokenBlacklist']: TOKEN_BLACKLIST_SCHEMA,
+                self.COLLECTIONS['EmailVerifications']: EMAIL_VERIFICATION_SCHEMA,  # Add this line
                 self.COLLECTIONS['DebugLogs']: DEBUG_LOGS_SCHEMA,
                 self.COLLECTIONS['AppParameters']: APP_PARAMETERS_SCHEMA
             }
@@ -231,19 +234,25 @@ class MongoDB:
         """Setup indexes for a collection"""
         if collection_name == self.COLLECTIONS['Users']:
             self._db[collection_name].create_index([("email", ASCENDING)], unique=True)
-            self._db[collection_name].create_index([("username", ASCENDING)], unique=True)
-            self._db[collection_name].create_index([("BLEOId", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("userName", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("bleoid", ASCENDING)], unique=True)
         elif collection_name == self.COLLECTIONS['PasswordResets']:
             self._db[collection_name].create_index([("token", ASCENDING)], unique=True)
             self._db[collection_name].create_index([("email", ASCENDING)])
         elif collection_name == self.COLLECTIONS['TokenBlacklist']:
             self._db[collection_name].create_index([("token", ASCENDING)], unique=True)
-            self._db[collection_name].create_index([("expires", ASCENDING)])
+            self._db[collection_name].create_index([("expires_at", ASCENDING)])
+        elif collection_name == self.COLLECTIONS['EmailVerifications']:  # Add this section
+            self._db[collection_name].create_index([("email", ASCENDING)])
+            self._db[collection_name].create_index([("token", ASCENDING)], unique=True)
+            self._db[collection_name].create_index([("bleoid", ASCENDING)])
+            self._db[collection_name].create_index([("expires_at", ASCENDING)])
+            self._db[collection_name].create_index([("verified", ASCENDING)])
         elif collection_name == self.COLLECTIONS['AppParameters']:
             self._db[collection_name].create_index([("param_name", ASCENDING)], unique=True)
         elif collection_name == self.COLLECTIONS['DebugLogs']:
             self._db[collection_name].create_index([("date", ASCENDING)])
-            self._db[collection_name].create_index([("BLEOId", ASCENDING)])
+            self._db[collection_name].create_index([("bleoid", ASCENDING)])
             self._db[collection_name].create_index([("type", ASCENDING)])
     
     def get_collection(self, collection_key):

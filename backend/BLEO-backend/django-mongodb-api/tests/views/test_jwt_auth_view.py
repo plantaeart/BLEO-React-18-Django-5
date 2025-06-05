@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from django.urls import path
 from django.test import override_settings
 from unittest.mock import patch
+from utils.privacy_utils import PrivacyUtils
 
 # Set up URL configuration for testing
 urlpatterns = [
@@ -84,7 +85,7 @@ class JWTAuthViewTest(BLEOBaseTest):
             # Create sample test users with all required fields
             self.test_users = [
                 {
-                    'BLEOId': 'TEST001',
+                    'bleoid': 'TEST01',
                     'email': 'test@example.com',
                     'password': make_password('Password123'),
                     'userName': 'TestUser1', 
@@ -96,7 +97,7 @@ class JWTAuthViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'TEST002',
+                    'bleoid': 'TEST02',
                     'email': 'user2@example.com',
                     'password': make_password('Password456'),
                     'userName': 'TestUser2',
@@ -108,7 +109,7 @@ class JWTAuthViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'INACTIVE001',
+                    'bleoid': 'INAC01',
                     'email': 'inactive@example.com',
                     'password': make_password('InactivePassword'),
                     'userName': 'InactiveUser',
@@ -127,7 +128,7 @@ class JWTAuthViewTest(BLEOBaseTest):
                 try:
                     result = self.db_users.insert_one(user)
                     self.user_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test user {i+1}: {user['BLEOId']} / {user['email']}")
+                    print(f"  ✅ Created test user {i+1}: {user['bleoid']} / {user['email']}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test user {i+1}: {str(e)}")
                     raise
@@ -174,7 +175,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         
         # Verify user data
         user_data = response.data['data']['user']
-        self.assertEqual(user_data['bleoid'], 'TEST001')
+        self.assertEqual(user_data['bleoid'], 'TEST01')
         self.assertEqual(user_data['email'], 'test@example.com')
         self.assertEqual(user_data['username'], 'TestUser1')
         
@@ -184,16 +185,16 @@ class JWTAuthViewTest(BLEOBaseTest):
         
         # Decode and verify access token
         access_payload = jwt.decode(access_token, self.jwt_secret, algorithms=['HS256'])
-        self.assertEqual(access_payload['bleoid'], 'TEST001')
+        self.assertEqual(access_payload['bleoid'], 'TEST01')
         self.assertEqual(access_payload['email'], 'test@example.com')
         
         # Decode and verify refresh token
         refresh_payload = jwt.decode(refresh_token, self.jwt_secret, algorithms=['HS256'])
-        self.assertEqual(refresh_payload['bleoid'], 'TEST001')
+        self.assertEqual(refresh_payload['bleoid'], 'TEST01')
         self.assertEqual(refresh_payload['email'], 'test@example.com')
         
         # Verify last_login was updated
-        updated_user = self.db_users.find_one({'BLEOId': 'TEST001'})
+        updated_user = self.db_users.find_one({'bleoid': 'TEST01'})
         self.assertIsNotNone(updated_user['last_login'])
         
         print("  🔹 Successfully authenticated user with valid credentials")
@@ -403,7 +404,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         
         # Verify new access token is valid and contains correct data
         new_payload = jwt.decode(new_access_token, self.jwt_secret, algorithms=['HS256'])
-        self.assertEqual(new_payload['bleoid'], 'TEST001')
+        self.assertEqual(new_payload['bleoid'], 'TEST01')
         self.assertEqual(new_payload['email'], 'test@example.com')
         
         print("  🔹 Successfully refreshed access token")
@@ -444,7 +445,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         """Test refresh failure with expired token"""
         # Create an expired refresh token
         expired_payload = {
-            'bleoid': 'TEST001',
+            'bleoid': 'TEST01',
             'email': 'test@example.com',
             'exp': datetime.now(timezone.utc) - timedelta(days=1)  # Expired yesterday
         }
@@ -501,7 +502,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         """Test refresh failure with token signed with wrong secret"""
         # Create token with wrong secret
         wrong_payload = {
-            'bleoid': 'TEST001',
+            'bleoid': 'TEST01',
             'email': 'test@example.com',
             'exp': datetime.now(timezone.utc) + timedelta(days=1)
         }
@@ -543,7 +544,7 @@ class JWTAuthViewTest(BLEOBaseTest):
             # Verify each new access token is valid
             new_access_token = response.data['data']['access']
             payload = jwt.decode(new_access_token, self.jwt_secret, algorithms=['HS256'])
-            self.assertEqual(payload['bleoid'], 'TEST001')
+            self.assertEqual(payload['bleoid'], 'TEST01')
             
             time.sleep(0.1)  # Small delay between requests
         
@@ -569,18 +570,17 @@ class JWTAuthViewTest(BLEOBaseTest):
         view = CustomTokenObtainPairView()
         
         for original, expected in test_cases:
-            masked = view._mask_email(original)
+            masked = PrivacyUtils.mask_email(original)
             self.assertEqual(masked, expected, f"Email masking failed for {original}. Expected: {expected}, Got: {masked}")
         
         # Test invalid emails
-        self.assertEqual(view._mask_email('invalid-email'), 'invalid-email')
-        self.assertEqual(view._mask_email(''), 'invalid-email')
-        self.assertEqual(view._mask_email(None), 'invalid-email')
+        self.assertEqual(PrivacyUtils.mask_email('invalid-email'), 'invalid-email')
+        self.assertEqual(PrivacyUtils.mask_email(''), 'invalid-email')
+        self.assertEqual(PrivacyUtils.mask_email(None), 'invalid-email')
         
         # Also test TokenRefreshView has the same behavior
-        refresh_view = TokenRefreshView()
         for original, expected in test_cases:
-            masked = refresh_view._mask_email(original)
+            masked = PrivacyUtils.mask_email(original)
             self.assertEqual(masked, expected, f"TokenRefreshView email masking failed for {original}. Expected: {expected}, Got: {masked}")
         
         print("  🔹 Email masking functionality works correctly for both views")
@@ -606,7 +606,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         
         # Verify token can be decoded
         payload = jwt.decode(access_token, self.jwt_secret, algorithms=['HS256'])
-        self.assertEqual(payload['bleoid'], 'TEST001')
+        self.assertEqual(payload['bleoid'], 'TEST01')
         
         # Step 3: Refresh token
         refresh_data = {'refresh': refresh_token}
@@ -617,7 +617,7 @@ class JWTAuthViewTest(BLEOBaseTest):
         
         # Step 4: Use new access token
         new_payload = jwt.decode(new_access_token, self.jwt_secret, algorithms=['HS256'])
-        self.assertEqual(new_payload['bleoid'], 'TEST001')
+        self.assertEqual(new_payload['bleoid'], 'TEST01')
         self.assertEqual(new_payload['email'], 'test@example.com')
         
         # Verify tokens are different

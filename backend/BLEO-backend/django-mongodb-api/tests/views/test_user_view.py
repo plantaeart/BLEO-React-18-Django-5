@@ -76,7 +76,7 @@ class UserViewTest(BLEOBaseTest):
             # Create sample test users with all required fields
             self.test_users = [
                 {
-                    'BLEOId': 'ABC123',
+                    'bleoid': 'ABC123',
                     'email': 'user1@example.com',
                     'password': make_password('Password123'),
                     'userName': 'TestUser1', 
@@ -87,7 +87,7 @@ class UserViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'DEF456',
+                    'bleoid': 'DEF456',
                     'email': 'user2@example.com',
                     'password': make_password('Password456'),
                     'userName': 'TestUser2',
@@ -105,7 +105,7 @@ class UserViewTest(BLEOBaseTest):
                 try:
                     result = self.db_users.insert_one(user)
                     self.user_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test user {i+1}: {user['BLEOId']} / {user['email']}")
+                    print(f"  ✅ Created test user {i+1}: {user['bleoid']} / {user['email']}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test user {i+1}: {str(e)}")
                     raise
@@ -132,8 +132,8 @@ class UserViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['data']), 2)
-        self.assertEqual(response.data['data'][0]['BLEOId'], 'ABC123')
-        self.assertEqual(response.data['data'][1]['BLEOId'], 'DEF456')
+        self.assertEqual(response.data['data'][0]['bleoid'], 'ABC123')
+        self.assertEqual(response.data['data'][1]['bleoid'], 'DEF456')
         self.assertEqual(response.data['successMessage'], 'Users retrieved successfully')
         
         # Verify no passwords are returned
@@ -158,7 +158,7 @@ class UserViewTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['data']['email'], 'newuser@example.com')
-        self.assertIsNotNone(response.data['data']['BLEOId'])
+        self.assertIsNotNone(response.data['data']['bleoid'])
         self.assertNotIn('password', response.data['data'])
         self.assertEqual(response.data['successMessage'], 'User created successfully')
         
@@ -171,7 +171,7 @@ class UserViewTest(BLEOBaseTest):
         # Verify password was hashed
         self.assertTrue(created_user['password'].startswith('pbkdf2_'))
         
-        print(f"  🔹 Successfully created user with BLEOId: {response.data['data']['BLEOId']}")
+        print(f"  🔹 Successfully created user with bleoid: {response.data['data']['bleoid']}")
     
     def test_create_user_duplicate_email(self):
         """Test error when creating user with existing email"""
@@ -229,23 +229,23 @@ class UserViewTest(BLEOBaseTest):
     # ====== UserDetailView Tests ======
     
     def test_get_user_by_bleoid(self):
-        """Test getting a user by BLEOId"""
+        """Test getting a user by bleoid"""
         # Make request
         response = self.client.get('/users/ABC123/')
         
         # Check response
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['data']['BLEOId'], 'ABC123')
+        self.assertEqual(response.data['data']['bleoid'], 'ABC123')
         self.assertEqual(response.data['data']['email'], 'user1@example.com')
         self.assertNotIn('password', response.data['data'])
         self.assertEqual(response.data['successMessage'], 'User retrieved successfully')
         
-        print("  🔹 Successfully retrieved user by BLEOId")
+        print("  🔹 Successfully retrieved user by bleoid")
     
     def test_get_nonexistent_user(self):
         """Test error when getting a nonexistent user"""
-        # Make request with nonexistent BLEOId
-        response = self.client.get('/users/NONEXISTENT/')
+        # Make request with nonexistent bleoid
+        response = self.client.get('/users/NOP001/')
         
         # Check response
         self.assertEqual(response.status_code, 404)
@@ -274,7 +274,7 @@ class UserViewTest(BLEOBaseTest):
         self.assertEqual(response.data['data']['preferences']['notifications'], True)
         
         # Verify changes in database
-        updated_user = self.db_users.find_one({'BLEOId': 'ABC123'})
+        updated_user = self.db_users.find_one({'bleoid': 'ABC123'})
         self.assertEqual(updated_user['userName'], 'UpdatedUser')
         self.assertEqual(updated_user['bio'], 'Updated bio')
         
@@ -295,7 +295,7 @@ class UserViewTest(BLEOBaseTest):
         self.assertEqual(response.data['successMessage'], 'User updated successfully')
         
         # Verify password was hashed in database
-        updated_user = self.db_users.find_one({'BLEOId': 'ABC123'})
+        updated_user = self.db_users.find_one({'bleoid': 'ABC123'})
         self.assertTrue(check_password('NewPassword123', updated_user['password']))
         
         print("  🔹 Successfully updated password with proper hashing")
@@ -307,8 +307,8 @@ class UserViewTest(BLEOBaseTest):
             'userName': 'UpdatedUser'
         }
         
-        # Make request with nonexistent BLEOId
-        response = self.client.put('/users/NONEXISTENT/', update_data, format='json')
+        # Make request with nonexistent bleoid
+        response = self.client.put('/users/NOP001/', update_data, format='json')
         
         # Check response
         self.assertEqual(response.status_code, 404)
@@ -343,15 +343,15 @@ class UserViewTest(BLEOBaseTest):
         self.assertTrue(response.data['successMessage'].startswith('User deleted successfully'))
         
         # Verify user was deleted from database
-        user = self.db_users.find_one({'BLEOId': 'ABC123'})
+        user = self.db_users.find_one({'bleoid': 'ABC123'})
         self.assertIsNone(user)
         
         print("  🔹 Successfully deleted user")
     
     def test_delete_nonexistent_user(self):
         """Test error when deleting a nonexistent user"""
-        # Make request with nonexistent BLEOId
-        response = self.client.delete('/users/NONEXISTENT/')
+        # Make request with nonexistent bleoid
+        response = self.client.delete('/users/NOP001/')
         
         # Check response
         self.assertEqual(response.status_code, 404)

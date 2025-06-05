@@ -84,7 +84,7 @@ class ConnectionViewTest(BLEOBaseTest):
             # Create sample test users
             self.test_users = [
                 {
-                    'BLEOId': 'USER001',
+                    'bleoid': 'USER01',
                     'email': 'user1@example.com',
                     'password': make_password('Password123'),
                     'userName': 'TestUser1', 
@@ -96,7 +96,7 @@ class ConnectionViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'USER002',
+                    'bleoid': 'USER02',
                     'email': 'user2@example.com',
                     'password': make_password('Password456'),
                     'userName': 'TestUser2',
@@ -108,7 +108,7 @@ class ConnectionViewTest(BLEOBaseTest):
                     'created_at': datetime.now()
                 },
                 {
-                    'BLEOId': 'USER003',
+                    'bleoid': 'USER03',
                     'email': 'user3@example.com',
                     'password': make_password('Password789'),
                     'userName': 'TestUser3',
@@ -127,7 +127,7 @@ class ConnectionViewTest(BLEOBaseTest):
                 try:
                     result = self.db_users.insert_one(user)
                     self.user_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test user {i+1}: {user['BLEOId']} / {user['email']}")
+                    print(f"  ✅ Created test user {i+1}: {user['bleoid']} / {user['email']}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test user {i+1}: {str(e)}")
                     raise
@@ -151,8 +151,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test sending a connection request successfully"""
         # Request data
         request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER002'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER02'
         }
         
         # Make request
@@ -160,15 +160,15 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Check response
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['data']['BLEOIdPartner1'], 'USER001')
-        self.assertEqual(response.data['data']['BLEOIdPartner2'], 'USER002')
+        self.assertEqual(response.data['data']['bleoidPartner1'], 'USER01')
+        self.assertEqual(response.data['data']['bleoidPartner2'], 'USER02')
         self.assertEqual(response.data['data']['status'], ConnectionStatusType.PENDING)
         self.assertEqual(response.data['successMessage'], 'Connection request sent')
         
         # Verify connection was created in database
         connection = self.db_links.find_one({
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002'
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02'
         })
         self.assertIsNotNone(connection)
         self.assertEqual(connection['status'], ConnectionStatusType.PENDING)
@@ -179,7 +179,7 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test error when sending connection request with invalid data"""
         # Request data (missing to_bleoid)
         request_data = {
-            'from_bleoid': 'USER001'
+            'from_bleoid': 'USER01'
         }
         
         # Make request
@@ -196,17 +196,17 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test error when sending connection request to nonexistent user"""
         # Request data with nonexistent user
         request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'NONEXISTENT'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'NOP'
         }
         
         # Make request
         response = self.client.post('/connections/request/', request_data, format='json')
         
         # Check response
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.data['errorType'], 'NotFoundError')
-        self.assertEqual(response.data['errorMessage'], 'One or both users not found')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['errorType'], 'ValidationError')
+        self.assertEqual(response.data['errorMessage'], 'Invalid connection request data')
         
         print("  🔹 Properly handled nonexistent user in connection request")
     
@@ -214,15 +214,15 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test error when sending duplicate connection request"""
         # Create initial connection request
         initial_request = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER002'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER02'
         }
         self.client.post('/connections/request/', initial_request, format='json')
         
         # Try to send duplicate request
         duplicate_request = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER002'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER02'
         }
         
         # Make request
@@ -237,20 +237,20 @@ class ConnectionViewTest(BLEOBaseTest):
     
     def test_send_connection_request_when_already_connected(self):
         """Test error when trying to connect with someone who already has an active connection"""
-        # Create an accepted connection for USER002 with USER003
+        # Create an accepted connection for USER02 with USER03
         existing_connection = {
-            'BLEOIdPartner1': 'USER002',
-            'BLEOIdPartner2': 'USER003',
+            'bleoidPartner1': 'USER02',
+            'bleoidPartner2': 'USER03',
             'status': ConnectionStatusType.ACCEPTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
         self.db_links.insert_one(existing_connection)
         
-        # Try to send request to USER002 who already has an active connection
+        # Try to send request to USER02 who already has an active connection
         request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER002'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER02'
         }
         
         # Make request
@@ -267,8 +267,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test renewing a previously rejected connection request"""
         # Create a rejected connection
         rejected_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.REJECTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -277,8 +277,8 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Send new request (should renew the rejected one)
         request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER002'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER02'
         }
         
         # Make request
@@ -301,8 +301,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test accepting a connection request successfully"""
         # Create a pending connection
         pending_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -333,8 +333,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test rejecting a connection request successfully"""
         # Create a pending connection
         pending_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -365,8 +365,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test blocking a connection request successfully"""
         # Create a pending connection
         pending_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -416,8 +416,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test error when responding with invalid action"""
         # Create a pending connection
         pending_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -442,20 +442,20 @@ class ConnectionViewTest(BLEOBaseTest):
     
     def test_accept_when_already_connected(self):
         """Test error when trying to accept connection while already having an active one"""
-        # Create an existing accepted connection for USER002
+        # Create an existing accepted connection for USER02
         existing_connection = {
-            'BLEOIdPartner1': 'USER002',
-            'BLEOIdPartner2': 'USER003',
+            'bleoidPartner1': 'USER02',
+            'bleoidPartner2': 'USER03',
             'status': ConnectionStatusType.ACCEPTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
         self.db_links.insert_one(existing_connection)
         
-        # Create a pending connection for USER002 with USER001
+        # Create a pending connection for USER02 with USER01
         pending_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -463,7 +463,7 @@ class ConnectionViewTest(BLEOBaseTest):
         result = self.db_links.insert_one(pending_connection)
         connection_id = str(result.inserted_id)
         
-        # Try to accept (should fail because USER002 already has an active connection)
+        # Try to accept (should fail because USER02 already has an active connection)
         response_data = {
             'action': 'accept'
         }
@@ -483,27 +483,27 @@ class ConnectionViewTest(BLEOBaseTest):
     def test_get_all_connections_for_user(self):
         """Test getting all connections for a user (should be max 1 active connection)"""
         # In BLEO, a user can only have ONE active connection at a time
-        # Create one active connection for USER001
+        # Create one active connection for USER01
         active_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.ACCEPTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
         
-        # Create some historical connections (rejected/blocked) for USER001
+        # Create some historical connections (rejected/blocked) for USER01
         historical_connections = [
             {
-                'BLEOIdPartner1': 'USER001',
-                'BLEOIdPartner2': 'USER003',
+                'bleoidPartner1': 'USER01',
+                'bleoidPartner2': 'USER03',
                 'status': ConnectionStatusType.REJECTED,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             },
             {
-                'BLEOIdPartner1': 'USER003',
-                'BLEOIdPartner2': 'USER001',
+                'bleoidPartner1': 'USER03',
+                'bleoidPartner2': 'USER01',
                 'status': ConnectionStatusType.BLOCKED,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
@@ -516,7 +516,7 @@ class ConnectionViewTest(BLEOBaseTest):
             self.db_links.insert_one(connection)
         
         # Make request to get all connections (including historical)
-        response = self.client.get('/connections/', {'bleoid': 'USER001'})
+        response = self.client.get('/connections/', {'bleoid': 'USER01'})
         
         # Check response
         self.assertEqual(response.status_code, 200)
@@ -528,7 +528,7 @@ class ConnectionViewTest(BLEOBaseTest):
         active_connections = [conn for conn in response.data['data']['connections'] 
                              if conn['status'] == ConnectionStatusType.ACCEPTED]
         self.assertEqual(len(active_connections), 1)
-        self.assertEqual(active_connections[0]['BLEOIdPartner2'], 'USER002')
+        self.assertEqual(active_connections[0]['bleoidPartner2'], 'USER02')
         
         # Verify user info is included
         for connection in response.data['data']['connections']:
@@ -540,10 +540,10 @@ class ConnectionViewTest(BLEOBaseTest):
     
     def test_get_active_connection_only(self):
         """Test getting only the active connection for a user"""
-        # Create one active connection for USER001
+        # Create one active connection for USER01
         active_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.ACCEPTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -551,8 +551,8 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Create some historical connections
         rejected_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER003',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER03',
             'status': ConnectionStatusType.REJECTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -564,7 +564,7 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Make request for active connections only
         response = self.client.get('/connections/', {
-            'bleoid': 'USER001',
+            'bleoid': 'USER01',
             'status': ConnectionStatusType.ACCEPTED
         })
         
@@ -572,29 +572,29 @@ class ConnectionViewTest(BLEOBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['data']['connections']), 1)
         self.assertEqual(response.data['data']['connections'][0]['status'], ConnectionStatusType.ACCEPTED)
-        self.assertEqual(response.data['data']['connections'][0]['BLEOIdPartner2'], 'USER002')
+        self.assertEqual(response.data['data']['connections'][0]['bleoidPartner2'], 'USER02')
         
         print("  🔹 Successfully retrieved only active connection for user")
     
     def test_user_cannot_have_multiple_active_connections(self):
         """Test that a user cannot have multiple active connections"""
-        # Create one active connection for USER001
+        # Create one active connection for USER01
         active_connection = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.ACCEPTED,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
         self.db_links.insert_one(active_connection)
         
-        # Try to create another connection request for USER001
+        # Try to create another connection request for USER01
         request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER003'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER03'
         }
         
-        # Make request - should fail because USER001 already has an active connection
+        # Make request - should fail because USER01 already has an active connection
         response = self.client.post('/connections/request/', request_data, format='json')
         
         # Check response
@@ -606,19 +606,19 @@ class ConnectionViewTest(BLEOBaseTest):
     
     def test_get_pending_requests_for_user(self):
         """Test getting pending connection requests for a user"""
-        # Create pending requests TO USER002 (incoming)
+        # Create pending requests TO USER02 (incoming)
         incoming_request = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
         }
         
-        # Create pending request FROM USER002 (outgoing)
+        # Create pending request FROM USER02 (outgoing)
         outgoing_request = {
-            'BLEOIdPartner1': 'USER002',
-            'BLEOIdPartner2': 'USER003',
+            'bleoidPartner1': 'USER02',
+            'bleoidPartner2': 'USER03',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -630,7 +630,7 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Make request for pending connections only
         response = self.client.get('/connections/', {
-            'bleoid': 'USER002',
+            'bleoid': 'USER02',
             'status': ConnectionStatusType.PENDING
         })
         
@@ -648,8 +648,8 @@ class ConnectionViewTest(BLEOBaseTest):
         """Test that connection history is properly tracked"""
         # Create a connection lifecycle: pending -> accepted -> rejected
         connection_data = {
-            'BLEOIdPartner1': 'USER001',
-            'BLEOIdPartner2': 'USER002',
+            'bleoidPartner1': 'USER01',
+            'bleoidPartner2': 'USER02',
             'status': ConnectionStatusType.PENDING,
             'created_at': datetime.now(),
             'updated_at': datetime.now()
@@ -664,7 +664,7 @@ class ConnectionViewTest(BLEOBaseTest):
         
         # Verify it's now accepted
         response = self.client.get('/connections/', {
-            'bleoid': 'USER001',
+            'bleoid': 'USER01',
             'status': ConnectionStatusType.ACCEPTED
         })
         self.assertEqual(len(response.data['data']['connections']), 1)
@@ -674,17 +674,17 @@ class ConnectionViewTest(BLEOBaseTest):
                                   {'action': 'reject'}, format='json')
         self.assertEqual(response.status_code, 200)
         
-        # Verify it's now rejected and USER001 can make new requests
+        # Verify it's now rejected and USER01 can make new requests
         response = self.client.get('/connections/', {
-            'bleoid': 'USER001',
+            'bleoid': 'USER01',
             'status': ConnectionStatusType.REJECTED
         })
         self.assertEqual(len(response.data['data']['connections']), 1)
         
-        # Verify USER001 can now send new requests since they have no active connection
+        # Verify USER01 can now send new requests since they have no active connection
         new_request_data = {
-            'from_bleoid': 'USER001',
-            'to_bleoid': 'USER003'
+            'from_bleoid': 'USER01',
+            'to_bleoid': 'USER03'
         }
         response = self.client.post('/connections/request/', new_request_data, format='json')
         self.assertEqual(response.status_code, 201)

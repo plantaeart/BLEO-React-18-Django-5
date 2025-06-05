@@ -6,20 +6,33 @@ from utils.mongodb_utils import MongoDB
 from api.serializers import DebugLogSerializer
 from models.enums.LogType import LogType
 from datetime import datetime, timedelta
+from utils.validation_utils import validate_url_bleoid
+from rest_framework.exceptions import ValidationError
+from models.enums.ErrorSourceType import ErrorSourceType
 
 class LoggingView(APIView):
     """API endpoint for client-side logging"""
     
     def post(self, request, format=None):
-        """Create a new log entry"""
+        """Create a new log entry with enhanced BLEOID validation"""
         serializer = DebugLogSerializer(data=request.data)
         
         if not serializer.is_valid():
+            # Enhanced error logging for BLEOID validation when provided
+            error_details = []
+            if 'bleoid' in serializer.errors:
+                error_details.append(f"BLEOID: {serializer.errors['bleoid']}")
+            
             return Response(
-                {"error": "Invalid log data", "details": serializer.errors},
+                {
+                    "error": "Invalid log data", 
+                    "details": serializer.errors,
+                    "validation_errors": error_details
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # BLEOID is now guaranteed to be valid format when provided
         data = serializer.validated_data
         
         # Use the Logger utility to save the log
@@ -27,12 +40,12 @@ class LoggingView(APIView):
             log_id = Logger.error(
                 message=data['message'],
                 code=data['code'],
-                bleoid=data.get('BLEOId'),
+                bleoid=data.get('bleoid'),
                 error_source=data.get('error_source')
             )
         else:
             log_id = Logger.user_action(
-                bleoid=data.get('BLEOId'),
+                bleoid=data.get('bleoid'),
                 message=data['message'],
                 log_type=data['type'],
                 code=data['code']
@@ -50,7 +63,7 @@ class AdminLogsView(APIView):
     """API endpoint for retrieving logs (admin use only)"""
     
     def get(self, request, format=None):
-        """Get logs with optional filtering"""
+        """Get logs with optional filtering and BLEOID validation"""
         try:
             db = MongoDB.get_instance().get_collection('DebugLogs')
             
@@ -74,9 +87,9 @@ class AdminLogsView(APIView):
             if log_type:
                 query['type'] = log_type
             
-            # BLEOId filter
+            # bleoid filter
             if bleoid:
-                query['BLEOId'] = bleoid
+                query['bleoid'] = bleoid
                 
             # Error source filter
             if error_source:
@@ -111,7 +124,27 @@ class AdminLogsView(APIView):
                     query['date']['$lte'] = end
                 except ValueError:
                     pass
-                
+            
+            # Validate BLEOID filter parameter if provided
+            bleoid = request.query_params.get('bleoid')
+            validated_bleoid = None
+            
+            if bleoid:
+                try:
+                    validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+                    query['bleoid'] = validated_bleoid
+                except ValidationError as e:
+                    Logger.debug_error(
+                        f"Invalid BLEOID format in filter: {bleoid} - {str(e)}",
+                        400,
+                        None,
+                        ErrorSourceType.SERVER.value
+                    )
+                    return Response(
+                        {"error": f"Invalid BLEOID format in filter: {bleoid}"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
             # Execute query with pagination
             logs = list(db.find(query).sort('date', -1).skip(skip).limit(limit))
             

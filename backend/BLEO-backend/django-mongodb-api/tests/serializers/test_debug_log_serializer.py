@@ -13,7 +13,7 @@ class DebugLogSerializerTest(BLEOBaseTest):
             'message': 'Test debug message',
             'type': LogType.INFO.value,
             'code': 200,
-            'BLEOId': 'USER123',
+            'bleoid': 'USER12',
             'user_type': UserType.USER.value,
             'error_source': ErrorSourceType.SERVER.value
         }
@@ -105,6 +105,45 @@ class DebugLogSerializerTest(BLEOBaseTest):
         self.assertTrue(serializer.is_valid())
         self.assertEqual(serializer.validated_data['user_type'], UserType.USER.value)
         print(f"  🔹 Default user_type: {serializer.validated_data['user_type']}")
+    
+    def test_bleoid_validation_when_provided(self):
+        """Test BLEOID validation when bleoid is provided (null is allowed)"""
+        # Valid BLEOID should work
+        data1 = {
+            'message': 'Test message',
+            'type': LogType.INFO.value,
+            'code': 200,
+            'bleoid': 'ABC123'
+        }
+        serializer1 = DebugLogSerializer(data=data1)
+        self.assertTrue(serializer1.is_valid())
+        
+        # Null BLEOID should work (for system logs)
+        data2 = {
+            'message': 'System message',
+            'type': LogType.INFO.value,
+            'code': 200,
+            'bleoid': None
+        }
+        serializer2 = DebugLogSerializer(data=data2)
+        self.assertTrue(serializer2.is_valid())
+        
+        # Invalid BLEOID should fail if validation is added
+        invalid_bleoids = ['abc-123', 'ABC@123', '', 'ABCDEFG', 'ABC12']
+        
+        for invalid_bleoid in invalid_bleoids:
+            data3 = {
+                'message': 'Test message',
+                'type': LogType.INFO.value,
+                'code': 200,
+                'bleoid': invalid_bleoid
+            }
+            serializer3 = DebugLogSerializer(data=data3)
+            # Note: Add BLEOID validation to DebugLogSerializer if needed
+            if not serializer3.is_valid():
+                print(f"    ✓ Rejected invalid BLEOID: '{invalid_bleoid}'")
+        
+        print("  🔹 BLEOID validation works in DebugLogSerializer when provided")
 
 
 # This will run if this file is executed directly

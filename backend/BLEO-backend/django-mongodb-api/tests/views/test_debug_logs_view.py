@@ -104,7 +104,7 @@ class DebugLogViewsTest(BLEOBaseTest):
             self.test_logs = [
                 {
                     'id': 1001,
-                    'BLEOId': 'USER1',
+                    'bleoid': 'USER01',
                     'message': 'Test user action log',
                     'type': LogType.INFO.value,
                     'code': 200,
@@ -113,7 +113,7 @@ class DebugLogViewsTest(BLEOBaseTest):
                 },
                 {
                     'id': 1002,
-                    'BLEOId': 'USER2',
+                    'bleoid': 'USER02',
                     'message': 'Test error log',
                     'type': LogType.ERROR.value,
                     'code': 500,
@@ -156,7 +156,7 @@ class DebugLogViewsTest(BLEOBaseTest):
         """Test creating a new log entry successfully"""
         # Request data for user action log
         log_data = {
-            'BLEOId': 'TEST_USER',
+            'bleoid': 'TEST01',
             'message': 'User performed an action',
             'type': LogType.INFO.value,
             'code': 200
@@ -180,7 +180,7 @@ class DebugLogViewsTest(BLEOBaseTest):
         """Test creating an error log entry"""
         # Request data for error log
         log_data = {
-            'BLEOId': 'TEST_USER',
+            'bleoid': 'TEST01',
             'message': 'Something went wrong',
             'type': LogType.ERROR.value,
             'code': 500,
@@ -209,7 +209,7 @@ class DebugLogViewsTest(BLEOBaseTest):
         """Test error when creating log with invalid data"""
         # Request data missing required fields
         log_data = {
-            'BLEOId': 'TEST_USER'
+            'bleoid': 'TEST_U'
             # Missing message, type, and code
         }
         
@@ -253,17 +253,17 @@ class DebugLogViewsTest(BLEOBaseTest):
         print("  🔹 Successfully filtered logs by type")
     
     def test_filter_logs_by_bleoid(self):
-        """Test filtering logs by BLEOId"""
+        """Test filtering logs by bleoid"""
         # Make request
-        response = self.client.get('/admin/logs/', {'bleoid': 'USER1'})
+        response = self.client.get('/admin/logs/', {'bleoid': 'USER01'})
         
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['logs']), 1)
-        self.assertEqual(response.data['logs'][0]['BLEOId'], 'USER1')
+        self.assertEqual(response.data['logs'][0]['bleoid'], 'USER01')
         self.assertEqual(response.data['total'], 1)
         
-        print("  🔹 Successfully filtered logs by BLEOId")
+        print("  🔹 Successfully filtered logs by bleoid")
     
     def test_filter_logs_by_days(self):
         """Test filtering logs by days"""
@@ -325,7 +325,7 @@ class DebugLogViewsTest(BLEOBaseTest):
         # Check response
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['id'], 1001)
-        self.assertEqual(response.data['BLEOId'], 'USER1')
+        self.assertEqual(response.data['bleoid'], 'USER01')
         self.assertEqual(response.data['type'], LogType.INFO.value)
         
         print("  🔹 Successfully retrieved log by ID")

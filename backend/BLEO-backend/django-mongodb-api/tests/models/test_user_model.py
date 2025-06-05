@@ -10,13 +10,13 @@ class UserModelTest(BLEOBaseTest):
     def test_initialization_with_required_fields(self):
         """Test User initialization with only required fields"""
         user = User(
-            BLEOId="ABC123",
+            bleoid="ABC123",
             email="test@example.com",
             password="password123"
         )
         
         # Check required fields
-        self.assertEqual(user.BLEOId, "ABC123")
+        self.assertEqual(user.bleoid, "ABC123")
         self.assertEqual(user.email, "test@example.com")
         self.assertEqual(user.password, "password123")
         
@@ -39,7 +39,7 @@ class UserModelTest(BLEOBaseTest):
         preferences = {"theme": "dark", "notifications": True}
         
         user = User(
-            BLEOId="DEF456",
+            bleoid="DEF456",
             email="full@example.com",
             password="fullpassword",
             userName="FullUser",
@@ -52,7 +52,7 @@ class UserModelTest(BLEOBaseTest):
         )
         
         # Check all fields were set correctly
-        self.assertEqual(user.BLEOId, "DEF456")
+        self.assertEqual(user.bleoid, "DEF456")
         self.assertEqual(user.email, "full@example.com")
         self.assertEqual(user.userName, "FullUser")
         self.assertEqual(user.profilePic, profile_pic)
@@ -67,7 +67,7 @@ class UserModelTest(BLEOBaseTest):
     def test_to_dict_method(self):
         """Test User to_dict method returns all fields"""
         user = User(
-            BLEOId="GHI789",
+            bleoid="GHI789",
             email="dict@example.com",
             password="dictpassword",
             userName="DictUser",
@@ -77,7 +77,7 @@ class UserModelTest(BLEOBaseTest):
         user_dict = user.to_dict()
         
         # Check all fields are in the dict
-        self.assertEqual(user_dict["BLEOId"], "GHI789")
+        self.assertEqual(user_dict["bleoid"], "GHI789")
         self.assertEqual(user_dict["email"], "dict@example.com")
         self.assertEqual(user_dict["password"], "dictpassword")
         self.assertEqual(user_dict["userName"], "DictUser")
@@ -89,7 +89,7 @@ class UserModelTest(BLEOBaseTest):
     def test_from_dict_method(self):
         """Test User from_dict method creates correct object"""
         input_dict = {
-            "BLEOId": "JKL012",
+            "bleoid": "JKL012",
             "email": "from_dict@example.com",
             "password": "fromdictpass",
             "userName": "FromDictUser",
@@ -100,7 +100,7 @@ class UserModelTest(BLEOBaseTest):
         user = User.from_dict(input_dict)
         
         # Check all fields were set correctly
-        self.assertEqual(user.BLEOId, "JKL012")
+        self.assertEqual(user.bleoid, "JKL012")
         self.assertEqual(user.email, "from_dict@example.com")
         self.assertEqual(user.password, "fromdictpass")
         self.assertEqual(user.userName, "FromDictUser")
@@ -120,7 +120,52 @@ class UserModelTest(BLEOBaseTest):
         ids = {User.generate_bleoid() for _ in range(10)}
         self.assertEqual(len(ids), 10)  # All should be unique
         
-        print(f"  🔹 Generated BLEOId: {bleoid} with correct format")
+        print(f"  🔹 Generated bleoid: {bleoid} with correct format")
+    
+    def test_bleoid_format_validation(self):
+        """Test BLEOID format validation in User model"""
+        # Valid BLEOID should work
+        valid_user = User(
+            bleoid="ABC123",
+            email="test@example.com",
+            password="password123"
+        )
+        self.assertEqual(valid_user.bleoid, "ABC123")
+        
+        # Invalid BLEOIDs should raise ValueError
+        invalid_bleoids = [
+            "abc123",    # Lowercase
+            "ABC-123",   # Contains hyphen
+            "ABC@123",   # Contains special char
+            "ABC12",     # Too short
+            "ABCDEFG",   # Too long
+            "",          # Empty
+            None,        # Null
+        ]
+        
+        for invalid_bleoid in invalid_bleoids:
+            with self.assertRaises(ValueError) as context:
+                User(
+                    bleoid=invalid_bleoid,
+                    email="test@example.com",
+                    password="password123"
+                )
+            
+            self.assertIn("bleoid", str(context.exception).lower())
+            print(f"    ✓ Rejected invalid BLEOID: {invalid_bleoid}")
+        
+        print("  🔹 User BLEOID format validation works correctly")
+    
+    def test_generate_bleoid_format(self):
+        """Test generated BLEOID follows correct format"""
+        for _ in range(10):
+            bleoid = User.generate_bleoid()
+            
+            # Check format matches pattern ^[A-Z0-9]{6}$
+            self.assertRegex(bleoid, r'^[A-Z0-9]{6}$')
+            self.assertEqual(len(bleoid), 6)
+        
+        print("  🔹 Generated BLEOIDs follow correct format pattern")
 
 
 # This will run if this file is executed directly

@@ -21,7 +21,7 @@ urlpatterns = [
 
     # Link CRUD endpoints
     path('links/', LinkListCreateView.as_view(), name='link-list-create'),
-    path('links/<str:bleoidPartner1>/', LinkDetailView.as_view(), name='link-detail'),  
+    path('links/<str:bleoid>/', LinkDetailView.as_view(), name='link-detail'),  
     
     # MessagesDays CRUD endpoints - COLLECTION LEVEL
     path('messagesdays/', MessageDayListCreateView.as_view(), name='message-day-list'),
@@ -55,8 +55,7 @@ urlpatterns += [
     path('auth/password/reset-confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     
     # Email verification
-    path('auth/email/verify-request/', EmailVerificationView.as_view(), name='email_verify_request'),
-    path('auth/email/verify-confirm/', EmailVerificationView.as_view(), name='email_verify_confirm'),
+    path('auth/email/verify/', EmailVerificationView.as_view(), name='email-verification'),
     
     # User connections
     path('connections/request/', ConnectionRequestView.as_view(), name='connection_request'),

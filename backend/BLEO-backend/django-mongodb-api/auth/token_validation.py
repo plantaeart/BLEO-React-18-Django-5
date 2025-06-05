@@ -44,7 +44,7 @@ class TokenValidationView(APIView):
                 
                 # Log token decode success
                 Logger.debug_system_action(
-                    f"Token decoded successfully for BLEOId: {bleoid}",
+                    f"Token decoded successfully for bleoid: {bleoid}",
                     LogType.INFO.value,
                     200
                 )
@@ -54,7 +54,7 @@ class TokenValidationView(APIView):
                 if db_blacklist.find_one({"token": token}):
                     # Log blacklisted token
                     Logger.debug_error(
-                        f"Token validation failed: Token is blacklisted for BLEOId: {bleoid}",
+                        f"Token validation failed: Token is blacklisted for bleoid: {bleoid}",
                         401,
                         bleoid,
                         ErrorSourceType.SERVER.value
@@ -77,7 +77,7 @@ class TokenValidationView(APIView):
                     
                     # Log token expired
                     Logger.debug_error(
-                        f"Token validation failed: Token expired at {expires_str} for BLEOId: {bleoid}",
+                        f"Token validation failed: Token expired at {expires_str} for bleoid: {bleoid}",
                         401,
                         bleoid,
                         ErrorSourceType.SERVER.value
@@ -94,7 +94,7 @@ class TokenValidationView(APIView):
                 
                 # Token is valid - get user info
                 db_users = MongoDB.get_instance().get_collection('Users')
-                user = db_users.find_one({"BLEOId": bleoid}, {"password": 0})
+                user = db_users.find_one({"bleoid": bleoid}, {"password": 0})
                 
                 if user:
                     user["_id"] = str(user["_id"])
@@ -118,7 +118,7 @@ class TokenValidationView(APIView):
                 else:
                     # Log user not found
                     Logger.debug_error(
-                        f"Token validation failed: User not found for BLEOId: {bleoid}",
+                        f"Token validation failed: User not found for bleoid: {bleoid}",
                         404,
                         bleoid,
                         ErrorSourceType.SERVER.value

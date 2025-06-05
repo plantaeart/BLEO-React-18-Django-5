@@ -5,26 +5,50 @@ from models.enums.MoodType import MoodType
 from models.enums.MoodQuadrantType import MoodQuadrantType
 from models.enums.EnergyLevelType import EnergyLevelType
 from models.enums.PleasantnessType import PleasantnessType
+import re
 
 class MessagesDays:
     """Daily messages schema"""
     def __init__(
         self,
-        fromBLEOId: str,
-        toBLEOId: str,
+        from_bleoid: str,
+        to_bleoid: str,
         date: datetime,
         messages: List[Dict[str, Any]] = None,
         mood: str = None,
         energy_level: str = None,
         pleasantness: str = None
     ):
-        self.fromBLEOId = fromBLEOId
-        self.toBLEOId = toBLEOId
+        self.from_bleoid = self._validate_and_normalize_bleoid(from_bleoid, "from_bleoid")
+        self.to_bleoid = self._validate_and_normalize_bleoid(to_bleoid, "to_bleoid")
+        
+        # Check after normalization
+        if self.from_bleoid == self.to_bleoid:
+            raise ValueError("from_bleoid and to_bleoid cannot be the same")
+        
         self.date = date or datetime.now().date()
         self.messages = [MessageInfos.from_dict(msg) for msg in (messages or [])]
         self.mood = mood
         self._energy_level = energy_level
         self._pleasantness = pleasantness
+    
+    @staticmethod
+    def _validate_and_normalize_bleoid(value: str, field_name: str) -> str:
+        """Validate and normalize BLEOID format"""
+        if not value:
+            raise ValueError(f"{field_name} cannot be null or empty")
+        
+        if not value or len(value.strip()) == 0:
+            raise ValueError(f"{field_name} cannot be empty")
+        
+        # Normalize to uppercase and strip whitespace
+        normalized_bleoid = value.strip().upper()
+        
+        # Validate format matches pattern ^[A-Z0-9]{6}$
+        if not re.match(r'^[A-Z0-9]{6}$', normalized_bleoid):
+            raise ValueError(f"{field_name} must be exactly 6 uppercase letters/numbers. Invalid format: '{value}'")
+        
+        return normalized_bleoid
     
     @property
     def energy_level(self) -> Optional[str]:
@@ -77,8 +101,8 @@ class MessagesDays:
     
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "fromBLEOId": self.fromBLEOId,
-            "toBLEOId": self.toBLEOId,
+            "from_bleoid": self.from_bleoid,
+            "to_bleoid": self.to_bleoid,
             "date": self.date,
             "messages": [msg.to_dict() for msg in self.messages],
             "mood": self.mood,
@@ -88,9 +112,18 @@ class MessagesDays:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MessagesDays':
+        """Create MessagesDays from dictionary with validation"""
+        from_bleoid = data.get("from_bleoid")
+        to_bleoid = data.get("to_bleoid")
+        
+        if not from_bleoid:
+            raise ValueError("from_bleoid is required")
+        if not to_bleoid:
+            raise ValueError("to_bleoid is required")
+            
         return cls(
-            fromBLEOId=data.get("fromBLEOId"),
-            toBLEOId=data.get("toBLEOId"),
+            from_bleoid=from_bleoid,
+            to_bleoid=to_bleoid,
             date=data.get("date"),
             messages=data.get("messages", []),
             mood=data.get("mood"),

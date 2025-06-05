@@ -71,7 +71,7 @@ class Logger:
             message=message,
             type=log_type,
             code=code,
-            BLEOId=bleoid,
+            bleoid=bleoid,
             user_type=UserType.USER.value
         )
         return Logger._save_log(log_entry)
@@ -95,7 +95,7 @@ class Logger:
             message=message,
             type=LogType.ERROR.value,
             code=code,
-            BLEOId=bleoid,
+            bleoid=bleoid,
             user_type=user_type,
             error_source=error_source
         )
