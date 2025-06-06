@@ -9,7 +9,7 @@ from api.serializers import UserSerializer
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
-from utils.validation_utils import validate_url_bleoid
+from utils.validation_patterns import ValidationPatterns
 from rest_framework.exceptions import ValidationError
 from datetime import datetime
 
@@ -210,7 +210,7 @@ class UserDetailView(APIView):
         """Get a user by BLEOID"""
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Find user
             user = self.get_object(validated_bleoid)
@@ -282,7 +282,7 @@ class UserDetailView(APIView):
         """Update a user"""
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Check if user exists
             user = self.get_object(validated_bleoid)
@@ -397,7 +397,7 @@ class UserDetailView(APIView):
         """Delete a user by bleoid with URL validation"""
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Continue with existing logic using validated_bleoid
             # Log delete action

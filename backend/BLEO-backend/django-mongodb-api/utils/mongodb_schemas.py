@@ -1,5 +1,7 @@
 # MongoDB schema validators
 
+from utils.validation_patterns import ValidationPatterns, ValidationRules
+
 USER_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
@@ -7,12 +9,14 @@ USER_SCHEMA = {
         "properties": {
             "bleoid": {
                 "bsonType": "string",
-                "pattern": "^[A-Z0-9]{6}$",
-                "description": "Unique BLEO identifier with format XXXXXX (6 chars)"
+                "pattern": ValidationPatterns.BLEOID_PATTERN,
+                "description": ValidationPatterns.BLEOID_DESCRIPTION
             },
             "email": {
                 "bsonType": "string",
-                "description": "User email"
+                "pattern": ValidationPatterns.EMAIL_BASIC_PATTERN,
+                "maxLength": ValidationRules.MAX_LENGTHS['email'],
+                "description": "User's email address"
             },
             "password": {
                 "bsonType": "string",
@@ -156,19 +160,43 @@ MESSAGE_DAY_SCHEMA = {
 PASSWORD_RESET_SCHEMA = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["email", "token", "expires"],
+        "required": ["bleoid", "email", "token", "created_at", "expires_at", "used", "attempts"],
         "properties": {
+            "bleoid": {
+                "bsonType": "string",
+                "pattern": ValidationPatterns.BLEOID_PATTERN,
+                "description": ValidationPatterns.BLEOID_DESCRIPTION
+            },
             "email": {
                 "bsonType": "string",
-                "description": "User email for password reset"
+                "pattern": ValidationPatterns.EMAIL_BASIC_PATTERN,
+                "maxLength": ValidationRules.MAX_LENGTHS['email'],
+                "description": "User's email address for password reset"
             },
             "token": {
                 "bsonType": "string",
-                "description": "Unique token for password reset verification"
+                "description": "JWT reset token"
             },
-            "expires": {
+            "created_at": {
                 "bsonType": "date",
-                "description": "Token expiration timestamp"
+                "description": "When the reset token was created"
+            },
+            "expires_at": {
+                "bsonType": "date",
+                "description": "When the reset token expires"
+            },
+            "used": {
+                "bsonType": "bool",
+                "description": "Whether the reset token has been used"
+            },
+            "attempts": {
+                "bsonType": "int",
+                "description": "Number of reset attempts",
+                "minimum": 0
+            },
+            "used_at": {
+                "bsonType": ["date", "null"],
+                "description": "When the reset token was used (if applicable)"
             }
         }
     }

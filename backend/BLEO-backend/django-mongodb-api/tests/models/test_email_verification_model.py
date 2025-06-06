@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import time
 from datetime import timezone
 from api.serializers import EmailVerificationSerializer
+from utils.validation_patterns import ValidationRules
 
 class EmailVerificationModelTest(BLEOBaseTest):
     """Test cases for EmailVerification model"""
@@ -331,7 +332,7 @@ class EmailVerificationModelTest(BLEOBaseTest):
             bleoid="TUV678",
             email="workflow@example.com",
             token="workflow_token",
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=ValidationRules.JWT_EXPIRATION['email_verification'])
         )
         
         # Initial state

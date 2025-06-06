@@ -78,7 +78,7 @@ class EmailService:
         <h2>Welcome to BLEO, {username}!</h2>
         <p>Please verify your email address to activate your account.</p>
         <p><a href="{verification_url}" style="background: #4A90E2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Verify Email</a></p>
-        <p>This link expires in 24 hours.</p>
+        <p>This link expires in 1 hours.</p>
         """
         
         text_content = f"""
@@ -86,7 +86,40 @@ class EmailService:
         
         Please verify your email address: {verification_url}
         
-        This link expires in 24 hours.
+        This link expires in 1 hours.
         """
         
         return EmailService.send_email(user_email, subject, html_content, text_content)
+    
+    @staticmethod
+    def send_password_reset_email(email, reset_token, user_name):
+        """Send password reset email"""
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        reset_url = f"{base_url}/reset-password?token={reset_token}"
+        
+        subject = "Reset Your BLEO Password"
+        
+        html_content = f"""
+        <h2>Password Reset Request</h2>
+        <p>Hello {user_name},</p>
+        <p>You requested to reset your password for your BLEO account.</p>
+        <p><a href="{reset_url}" style="background: #E74C3C; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+        <p>This link expires in 1 hours.</p>
+        <p>If you didn't request this reset, you can safely ignore this email.</p>
+        """
+        
+        text_content = f"""
+        Password Reset Request
+    
+        Hello {user_name},
+        
+        You requested to reset your password for your BLEO account.
+        
+        Reset your password: {reset_url}
+        
+        This link expires in 1 hours.
+        
+        If you didn't request this reset, you can safely ignore this email.
+        """
+        
+        return EmailService.send_email(email, subject, html_content, text_content)

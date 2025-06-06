@@ -9,7 +9,7 @@ from api.serializers import LinkSerializer
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
-from utils.validation_utils import validate_url_bleoid
+from utils.validation_patterns import ValidationPatterns
 from rest_framework.exceptions import ValidationError
 
 class LinkListCreateView(APIView):
@@ -216,7 +216,7 @@ class LinkDetailView(APIView):
         """Get a link by BLEOID (searches both partner1 and partner2 fields)"""
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Find link where the BLEOID is either partner1 or partner2
             db = MongoDB.get_instance().get_collection('Links')

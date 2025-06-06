@@ -15,19 +15,11 @@ import string
 from bson import Binary
 import base64
 
-def validate_bleoid_format(value, field_name="bleoid"):
-    """Centralized BLEOID validation function"""
-    if not value or len(value.strip()) == 0:
-        raise serializers.ValidationError(f"{field_name} cannot be empty")
-    
-    # Normalize to uppercase and strip whitespace
-    normalized_value = value.strip().upper()
-    
-    # Validate format matches pattern ^[A-Z0-9]{6}$
-    if not re.match(r'^[A-Z0-9]{6}$', normalized_value):
-        raise serializers.ValidationError(f"{field_name} must be exactly 6 uppercase letters/numbers")
-    
-    return normalized_value
+from utils.validation_patterns import (
+    ValidationPatterns, 
+    ValidationMessages, 
+    ValidationRules
+)
 
 class FlexibleDateField(serializers.Field):
     """Custom field to handle multiple date formats"""
@@ -37,18 +29,14 @@ class FlexibleDateField(serializers.Field):
         if not value:
             return None
             
-        # Try formats in order of preference
-        formats = ['%d-%m-%Y', '%Y-%m-%d']
-        
-        for date_format in formats:
+        # Use centralized date formats
+        for date_format in ValidationRules.SUPPORTED_DATE_FORMATS:
             try:
                 return datetime.strptime(value, date_format).date()
             except (ValueError, TypeError):
                 continue
                 
-        raise serializers.ValidationError(
-            f"Date format invalid. Please use DD-MM-YYYY or YYYY-MM-DD format."
-        )
+        raise serializers.ValidationError(ValidationMessages.DATE_INVALID_FORMAT)
     
     def to_representation(self, value):
         """Convert Python date object to string"""
@@ -58,13 +46,13 @@ class FlexibleDateField(serializers.Field):
         if isinstance(value, str):
             return value
             
-        # Standardize output format to DD-MM-YYYY
-        return value.strftime('%d-%m-%Y')
+        # Use standard date format
+        return value.strftime(ValidationRules.STANDARD_DATE_FORMAT)
 
 class MessageInfosSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False, read_only=True)
-    title = serializers.CharField(max_length=255)
-    text = serializers.CharField()
+    title = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['message_title'])
+    text = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['message_text'])
     type = serializers.ChoiceField(choices=[t.value for t in MessageType])
     created_at = serializers.DateTimeField(default=datetime.now, format="%Y-%m-%dT%H:%M:%S")
     date = serializers.CharField(required=False, read_only=True)
@@ -76,11 +64,11 @@ class MessageInfosSerializer(serializers.Serializer):
         return value
 
 class UserSerializer(serializers.Serializer):
-    bleoid = serializers.CharField(max_length=6, required=False)
-    email = serializers.EmailField(required=False)
-    password = serializers.CharField(min_length=8, required=False)
-    userName = serializers.CharField(max_length=50, required=False)
-    bio = serializers.CharField(max_length=500, required=False)
+    bleoid = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bleoid'], required=False)
+    email = serializers.EmailField(max_length=ValidationRules.MAX_LENGTHS['email'], required=False)
+    password = serializers.CharField(min_length=ValidationRules.MIN_LENGTHS['password'], required=False)
+    userName = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['userName'], required=False)
+    bio = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bio'], required=False)
     email_verified = serializers.BooleanField(required=False)
     preferences = serializers.DictField(required=False)
     last_login = serializers.CharField(required=False)
@@ -99,17 +87,13 @@ class UserSerializer(serializers.Serializer):
     
     def _generate_bleoid(self):
         """Generate a random 6-character BLEOID"""
-        characters = string.ascii_uppercase + string.digits
-        return ''.join(random.choice(characters) for _ in range(6))
+        return ''.join(random.choice(ValidationPatterns.UPPERCASE_ALPHANUMERIC) for _ in range(ValidationPatterns.BLEOID_LENGTH))
     
     def validate_bleoid(self, value):
         """Validate BLEOID format when provided"""
         if value:
-            import re
-            normalized_value = value.strip().upper()
-            if not re.match(r'^[A-Z0-9]{6}$', normalized_value):
-                raise serializers.ValidationError("BLEOID must be exactly 6 uppercase letters/numbers")
-            return normalized_value
+            # Use centralized validation
+            return ValidationPatterns.validate_bleoid_format(value, "bleoid")
         return value
     
     def validate_email(self, value):
@@ -135,17 +119,17 @@ class UserSerializer(serializers.Serializer):
             # For full creation, require email and password
             if not data.get('email'):
                 raise serializers.ValidationError({
-                    'email': 'Email is required for user creation'
+                    'email': ValidationMessages.EMAIL_REQUIRED
                 })
             if not data.get('password'):
                 raise serializers.ValidationError({
-                    'password': 'Password is required for user creation'
+                    'password': ValidationMessages.PASSWORD_REQUIRED
                 })
             
             # Require bleoid for full creation (unless auto-generating)
             if not auto_generate and not data.get('bleoid'):
                 raise serializers.ValidationError({
-                    'bleoid': 'BLEOID is required for user creation'
+                    'bleoid': ValidationMessages.BLEOID_REQUIRED
                 })
         
         return data
@@ -159,9 +143,7 @@ class UserSerializer(serializers.Serializer):
                 'bleoid': instance.bleoid,
                 'email': instance.email,
                 'userName': getattr(instance, 'userName', ''),
-
                 'bio': getattr(instance, 'bio', ''),
-
             }
         
         # Handle Binary profilePic conversion to base64
@@ -171,8 +153,8 @@ class UserSerializer(serializers.Serializer):
         return data
 
 class LinkSerializer(serializers.Serializer):
-    bleoidPartner1 = serializers.CharField(max_length=6, required=True, allow_null=False)
-    bleoidPartner2 = serializers.CharField(max_length=6, required=True, allow_null=False)
+    bleoidPartner1 = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bleoid'], required=True, allow_null=False)
+    bleoidPartner2 = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bleoid'], required=True, allow_null=False)
     status = serializers.ChoiceField(
         choices=["pending", "accepted", "rejected", "blocked"],
         default="pending"
@@ -186,9 +168,9 @@ class LinkSerializer(serializers.Serializer):
             raise serializers.ValidationError("bleoidPartner2 cannot be null")
         
         if not value or len(value.strip()) == 0:
-            raise serializers.ValidationError("bleoidPartner2 cannot be empty")
+            raise serializers.ValidationError(ValidationMessages.BLEOID_EMPTY)
         
-        return value.strip().upper()
+        return ValidationPatterns.validate_bleoid_format(value, "bleoidPartner2")
     
     def validate_bleoidPartner1(self, value):
         """Validate that bleoidPartner1 is not null or empty"""
@@ -196,9 +178,9 @@ class LinkSerializer(serializers.Serializer):
             raise serializers.ValidationError("bleoidPartner1 cannot be null")
         
         if not value or len(value.strip()) == 0:
-            raise serializers.ValidationError("bleoidPartner1 cannot be empty")
+            raise serializers.ValidationError(ValidationMessages.BLEOID_EMPTY)
         
-        return value.strip().upper()
+        return ValidationPatterns.validate_bleoid_format(value, "bleoidPartner1")
     
     def validate(self, data):
         """Validate that a user isn't linking to themselves"""
@@ -206,14 +188,14 @@ class LinkSerializer(serializers.Serializer):
         p2 = data.get('bleoidPartner2')
         
         if p1 and p2 and p1 == p2:
-            raise serializers.ValidationError({"bleoidPartner2": "Cannot link a user to themselves"})
+            raise serializers.ValidationError({"bleoidPartner2": ValidationMessages.BLEOID_SELF_REFERENCE})
             
         return data
 
 class MessagesDaysSerializer(serializers.Serializer):
     """Serializer for MessagesDays"""
-    from_bleoid = serializers.CharField(max_length=6, required=True, allow_null=False)
-    to_bleoid = serializers.CharField(max_length=6, required=False, allow_null=False)
+    from_bleoid = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bleoid'], required=True, allow_null=False)
+    to_bleoid = serializers.CharField(max_length=ValidationRules.MAX_LENGTHS['bleoid'], required=False, allow_null=False)
     date = serializers.CharField(required=True)
     messages = MessageInfosSerializer(many=True, required=False, default=[])
     mood = serializers.CharField(required=False, allow_null=True)
@@ -237,18 +219,18 @@ class MessagesDaysSerializer(serializers.Serializer):
         to_bleoid = data.get('to_bleoid')
         
         if from_bleoid and to_bleoid and from_bleoid == to_bleoid:
-            raise serializers.ValidationError({"to_bleoid": "Cannot send messages to yourself"})
+            raise serializers.ValidationError({"to_bleoid": ValidationMessages.BLEOID_SELF_REFERENCE})
             
         return data
 
     def validate_from_bleoid(self, value):
         """Validate from_bleoid format"""
-        return validate_bleoid_format(value, "from_bleoid")
+        return ValidationPatterns.validate_bleoid_format(value, "from_bleoid")
 
     def validate_to_bleoid(self, value):
         """Validate to_bleoid format (when provided)"""
         if value:
-            return validate_bleoid_format(value, "to_bleoid")
+            return ValidationPatterns.validate_bleoid_format(value, "to_bleoid")
         return value
 
 class ConnectionRequestSerializer(serializers.Serializer):
@@ -268,11 +250,11 @@ class ConnectionRequestSerializer(serializers.Serializer):
     
     def validate_from_bleoid(self, value):
         """Validate from_bleoid format"""
-        return validate_bleoid_format(value, "from_bleoid")
+        return ValidationPatterns.validate_bleoid_format(value, "from_bleoid")
 
     def validate_to_bleoid(self, value):
         """Validate to_bleoid format"""
-        return validate_bleoid_format(value, "to_bleoid")
+        return ValidationPatterns.validate_bleoid_format(value, "to_bleoid")
     
     def validate(self, data):
         """Cross-field validation"""
@@ -281,7 +263,7 @@ class ConnectionRequestSerializer(serializers.Serializer):
         
         if from_bleoid and to_bleoid and from_bleoid == to_bleoid:
             raise serializers.ValidationError({
-                'to_bleoid': 'Cannot send connection request to yourself'
+                'to_bleoid': ValidationMessages.BLEOID_SELF_REFERENCE
             })
         return data
 
@@ -345,11 +327,11 @@ class ConnectionSerializer(serializers.Serializer):
 
     def validate_bleoidPartner1(self, value):
         """Validate bleoidPartner1 format"""
-        return validate_bleoid_format(value, "bleoidPartner1")
+        return ValidationPatterns.validate_bleoid_format(value, "bleoidPartner1")
 
     def validate_bleoidPartner2(self, value):
         """Validate bleoidPartner2 format"""
-        return validate_bleoid_format(value, "bleoidPartner2")
+        return ValidationPatterns.validate_bleoid_format(value, "bleoidPartner2")
 
 class ConnectionFilterSerializer(serializers.Serializer):
     """Serializer for connection list filtering"""
@@ -367,7 +349,7 @@ class ConnectionFilterSerializer(serializers.Serializer):
 
     def validate_bleoid(self, value):
         """Validate bleoid format"""
-        return validate_bleoid_format(value, "bleoid")
+        return ValidationPatterns.validate_bleoid_format(value, "bleoid")
 
 class DebugLogSerializer(serializers.Serializer):
     """Serializer for validating log data from API requests"""
@@ -405,7 +387,7 @@ class DebugLogSerializer(serializers.Serializer):
     def validate_bleoid(self, value):
         """Validate BLEOID format when provided (null is allowed)"""
         if value is not None:
-            return validate_bleoid_format(value, "bleoid")
+            return ValidationPatterns.validate_bleoid_format(value, "bleoid")
         return value
 
 class AppParametersSerializer(serializers.Serializer):
@@ -486,19 +468,11 @@ class EmailVerificationSerializer(serializers.Serializer):
     
     def validate_bleoid(self, value):
         """Validate BLEO ID format"""
-        return validate_bleoid_format(value, "bleoid")
+        return ValidationPatterns.validate_bleoid_format(value, "bleoid")
 
     def validate_token(self, value):
         """Validate JWT token format"""
-        if not value or len(value.strip()) == 0:
-            raise serializers.ValidationError("Token cannot be empty")
-        
-        # Basic JWT format check (3 parts separated by dots)
-        parts = value.split('.')
-        if len(parts) != 3:
-            raise serializers.ValidationError("Invalid JWT token format")
-        
-        return value.strip()
+        return ValidationPatterns.validate_jwt_format(value, "token")
     
     def validate(self, data):
         """Cross-field validation"""
@@ -521,15 +495,7 @@ class EmailVerificationConfirmSerializer(serializers.Serializer):
     
     def validate_token(self, value):
         """Validate JWT token format"""
-        if not value or len(value.strip()) == 0:
-            raise serializers.ValidationError("Token cannot be empty")
-        
-        # Basic JWT format check
-        parts = value.split('.')
-        if len(parts) != 3:
-            raise serializers.ValidationError("Invalid JWT token format")
-        
-        return value.strip()
+        return ValidationPatterns.validate_jwt_format(value, "token")
 
 class EmailVerificationResponseSerializer(serializers.Serializer):
     """Serializer for email verification response data"""
@@ -561,3 +527,64 @@ class EmailVerificationResponseSerializer(serializers.Serializer):
             'email_verified_at': getattr(instance, 'email_verified_at', getattr(instance, 'verified_at', None)),
             'message': getattr(instance, 'message', '')
         }
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer for password reset request"""
+    email = serializers.EmailField(max_length=ValidationRules.MAX_LENGTHS['email'], required=True)
+    
+    def validate_email(self, value):
+        """Validate and normalize email"""
+        if not value:
+            raise serializers.ValidationError(ValidationMessages.EMAIL_REQUIRED)
+        
+        # Normalize email
+        normalized_email = value.lower().strip()
+        
+        # Additional validation can be added here
+        return normalized_email
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Serializer for password reset confirmation"""
+    token = serializers.CharField(required=True, min_length=1)
+    password = serializers.CharField(min_length=ValidationRules.MIN_LENGTHS['password'], required=True)
+    
+    def validate_token(self, value):
+        """Validate token format"""
+        return ValidationPatterns.validate_jwt_format(value, "token")
+    
+    def validate_password(self, value):
+        """Validate password strength"""
+        if len(value) < ValidationRules.MIN_LENGTHS['password']:
+            raise serializers.ValidationError(ValidationMessages.PASSWORD_TOO_SHORT)
+        
+        return value
+
+class PasswordResetResponseSerializer(serializers.Serializer):
+    """Serializer for password reset response data"""
+    password_reset = serializers.BooleanField(required=True)
+    reset_at = serializers.CharField(required=False, allow_null=True)
+    message = serializers.CharField(required=True)
+    
+    def validate_reset_at(self, value):
+        """Validate reset_at is a valid ISO datetime string"""
+        if value:
+            try:
+                from datetime import datetime
+                datetime.fromisoformat(value.replace('Z', '+00:00'))
+                return value
+            except ValueError:
+                raise serializers.ValidationError("reset_at must be a valid ISO datetime string")
+        return value
+
+class PasswordResetTokenValidationSerializer(serializers.Serializer):
+    """Serializer for validating password reset token parameter"""
+    token = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        min_length=10,
+        error_messages={
+            'required': 'Token parameter is required',
+            'blank': 'Token cannot be blank',
+            'min_length': 'Invalid token format'
+        }
+    )

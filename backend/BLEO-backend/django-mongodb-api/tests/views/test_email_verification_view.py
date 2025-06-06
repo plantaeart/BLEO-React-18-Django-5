@@ -1,4 +1,3 @@
-# Create tests/views/test_email_verification.py
 from tests.base_test import BLEOBaseTest, run_test_with_output
 from rest_framework.test import APIClient
 from auth.email_verification import EmailVerificationView

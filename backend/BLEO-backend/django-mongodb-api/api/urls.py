@@ -51,8 +51,8 @@ urlpatterns += [
     path('auth/validate-token/', TokenValidationView.as_view(), name='validate_token'),
 
     # Password management
-    path('auth/password/reset-request/', PasswordResetRequestView.as_view(), name='password_reset_request'),
-    path('auth/password/reset-confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    path('auth/password-reset/request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     
     # Email verification
     path('auth/email/verify/', EmailVerificationView.as_view(), name='email-verification'),

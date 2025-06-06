@@ -1,5 +1,3 @@
-# Create tests/serializers/test_email_verification_serializer.py
-
 from tests.base_test import BLEOBaseTest, run_test_with_output
 from api.serializers import (
     EmailVerificationSerializer,

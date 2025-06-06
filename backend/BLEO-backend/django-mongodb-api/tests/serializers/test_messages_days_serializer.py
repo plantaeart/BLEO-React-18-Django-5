@@ -232,7 +232,7 @@ class MessageDaySerializerTest(BLEOBaseTest):
         self.assertIn('to_bleoid', serializer.errors)
         
         error_message = str(serializer.errors['to_bleoid'])
-        self.assertIn('Cannot send messages to yourself', error_message)
+        self.assertIn('Cannot reference yourself', error_message)
         
         print("  🔹 Self-reference validation works correctly in MessagesDays")
 

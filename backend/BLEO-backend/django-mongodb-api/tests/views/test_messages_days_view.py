@@ -21,6 +21,7 @@ from models.enums.MoodType import MoodType
 from models.enums.EnergyLevelType import EnergyLevelType
 from models.enums.PleasantnessType import PleasantnessType
 from models.enums.MoodQuadrantType import MoodQuadrantType
+from utils.validation_patterns import ValidationRules
 
 # Set up URL configuration for testing
 urlpatterns = [
@@ -250,7 +251,7 @@ class MessagesDaysViewTest(BLEOBaseTest):
     
     def format_date(self, date):
         """Format a datetime object to DD-MM-YYYY string"""
-        return date.strftime('%d-%m-%Y')
+        return date.strftime(ValidationRules.STANDARD_DATE_FORMAT)
     
     def get_today_date_str(self):
         """Get today's date as DD-MM-YYYY string"""

@@ -13,7 +13,7 @@ from models.enums.PleasantnessType import PleasantnessType
 from utils.logger import Logger
 from models.enums.LogType import LogType
 from models.enums.ErrorSourceType import ErrorSourceType
-from utils.validation_utils import validate_url_bleoid
+from utils.validation_patterns import ValidationPatterns, ValidationRules
 from rest_framework.exceptions import ValidationError
 
 def _generate_message_ids(messages):
@@ -161,10 +161,10 @@ class MessageDayListCreateView(APIView):
             validated_to_bleoid = None
             
             if from_bleoid:
-                validated_from_bleoid = validate_url_bleoid(from_bleoid, "fromBleoid")
+                validated_from_bleoid = ValidationPatterns.validate_url_bleoid(from_bleoid, "fromBleoid")
             
             if to_bleoid:
-                validated_to_bleoid = validate_url_bleoid(to_bleoid, "toBleoid")
+                validated_to_bleoid = ValidationPatterns.validate_url_bleoid(to_bleoid, "toBleoid")
             
             # Build filter criteria using validated BLEOIDs
             filter_criteria = {}
@@ -178,7 +178,7 @@ class MessageDayListCreateView(APIView):
             # Single date filtering
             if date:
                 try:
-                    date_obj = datetime.strptime(date, '%d-%m-%Y')
+                    date_obj = datetime.strptime(date, ValidationRules.STANDARD_DATE_FORMAT)
                     start_of_day = datetime(date_obj.year, date_obj.month, date_obj.day)
                     end_of_day = start_of_day + timedelta(days=1, microseconds=-1)
                     
@@ -221,7 +221,7 @@ class MessageDayListCreateView(APIView):
             for day in message_days:
                 day['_id'] = str(day['_id'])
                 if 'date' in day and isinstance(day['date'], datetime):
-                    day['date'] = day['date'].strftime('%d-%m-%Y')
+                    day['date'] = day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
                 # Add quadrant information
                 _add_quadrant_info(self, day)
@@ -352,7 +352,7 @@ class MessageDayListCreateView(APIView):
             # Set default date if not provided
             if 'date' not in request.data:
                 now = datetime.now()
-                request.data['date'] = now.strftime('%d-%m-%Y')
+                request.data['date'] = now.strftime(ValidationRules.STANDARD_DATE_FORMAT)
 
             # Get current date and set time to midnight
             now = datetime.now()
@@ -368,14 +368,14 @@ class MessageDayListCreateView(APIView):
             
             if existing_entry:
                 Logger.debug_error(
-                    f"Message day already exists for {from_bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}",
+                    f"Message day already exists for {from_bleoid} to {to_bleoid} on {message_date.strftime(ValidationRules.STANDARD_DATE_FORMAT)}",
                     409,
                     from_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.error(
                     error_type="DuplicateError",
-                    error_message=f"Message day already exists for {from_bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
+                    error_message=f"Message day already exists for {from_bleoid} to {to_bleoid} on {message_date.strftime(ValidationRules.STANDARD_DATE_FORMAT)}"
                 ).to_response(status.HTTP_409_CONFLICT)
         
             # Process messages - generate IDs
@@ -402,7 +402,7 @@ class MessageDayListCreateView(APIView):
             
             # Format date for response
             if 'date' in created_message_day and isinstance(created_message_day['date'], datetime):
-                created_message_day['date'] = created_message_day['date'].strftime('%d-%m-%Y')
+                created_message_day['date'] = created_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
             
             # Add quadrant info
             _add_quadrant_info(self, created_message_day)
@@ -447,7 +447,7 @@ class MessageDayListCreateView(APIView):
             )
             
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -603,7 +603,7 @@ class MessageDayCreateView(APIView):
         """Create a new message day with from_bleoid from URL path"""
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Add validated bleoid to request data
             data = request.data.copy()
@@ -612,7 +612,7 @@ class MessageDayCreateView(APIView):
             # Check if date is provided, if not initialize to today
             if 'date' not in data:
                 now = datetime.now()
-                data['date'] = now.strftime('%d-%m-%Y')
+                data['date'] = now.strftime(ValidationRules.STANDARD_DATE_FORMAT)
 
             # STEP 1: Check if from_user exists FIRST
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -728,14 +728,14 @@ class MessageDayCreateView(APIView):
             
             if existing_entry:
                 Logger.debug_error(
-                    f"Message day already exists for {validated_bleoid} to {to_bleoid} on {message_date.strftime('%d-%m-%Y')}",
+                    f"Message day already exists for {validated_bleoid} to {to_bleoid} on {message_date.strftime(ValidationRules.STANDARD_DATE_FORMAT)}",
                     409,
                     validated_bleoid,
                     ErrorSourceType.SERVER.value
                 )
                 return BLEOResponse.error(
                     error_type="DuplicateError",
-                    error_message=f"Message day already exists for from_bleoid {validated_bleoid} to to_bleoid {to_bleoid} on {message_date.strftime('%d-%m-%Y')}"
+                    error_message=f"Message day already exists for from_bleoid {validated_bleoid} to to_bleoid {to_bleoid} on {message_date.strftime(ValidationRules.STANDARD_DATE_FORMAT)}"
                 ).to_response(status.HTTP_409_CONFLICT)
         
             # Process messages - generate IDs
@@ -762,7 +762,7 @@ class MessageDayCreateView(APIView):
             
             # Format date for response
             if 'date' in created_message_day and isinstance(created_message_day['date'], datetime):
-                created_message_day['date'] = created_message_day['date'].strftime('%d-%m-%Y')
+                created_message_day['date'] = created_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
             
             # Add quadrant info
             _add_quadrant_info(self, created_message_day)
@@ -807,7 +807,7 @@ class MessageDayCreateView(APIView):
             )
             
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Check if user exists
             db_users = MongoDB.get_instance().get_collection('Users')
@@ -873,7 +873,7 @@ class MessageDayDetailView(APIView):
         """Get message day by bleoid and date"""
         try:
             # No type conversion needed for bleoid anymore since it's a string
-            date_obj = datetime.strptime(date, '%d-%m-%Y')
+            date_obj = datetime.strptime(date, ValidationRules.STANDARD_DATE_FORMAT)
             
             # Midnight timestamp
             message_date = datetime(date_obj.year, date_obj.month, date_obj.day)
@@ -915,7 +915,7 @@ class MessageDayDetailView(APIView):
                 
                 # Format date
                 if 'date' in message_day and isinstance(message_day['date'], datetime):
-                    message_day['date'] = message_day['date'].strftime('%d-%m-%Y')
+                    message_day['date'] = message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
                 # Add quadrant information
                 _add_quadrant_info(self, message_day)
@@ -955,7 +955,7 @@ class MessageDayDetailView(APIView):
             elif date:
                 # All message days for a specific date
                 try:
-                    date_obj = datetime.strptime(date, '%d-%m-%Y')
+                    date_obj = datetime.strptime(date, ValidationRules.STANDARD_DATE_FORMAT)
                     start_of_day = datetime(date_obj.year, date_obj.month, date_obj.day)
                     end_of_day = start_of_day + timedelta(days=1, microseconds=-1)
                     
@@ -1005,7 +1005,7 @@ class MessageDayDetailView(APIView):
             for day in message_days:
                 day['_id'] = str(day['_id'])
                 if 'date' in day and isinstance(day['date'], datetime):
-                    day['date'] = day['date'].strftime('%d-%m-%Y')
+                    day['date'] = day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
                 # Add quadrant information
                 _add_quadrant_info(self, day)
@@ -1116,7 +1116,7 @@ class MessageDayDetailView(APIView):
             
             # Format date for response
             if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
-                updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
+                updated_message_day['date'] = updated_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
             
             # Add quadrant information
             _add_quadrant_info(self, updated_message_day)

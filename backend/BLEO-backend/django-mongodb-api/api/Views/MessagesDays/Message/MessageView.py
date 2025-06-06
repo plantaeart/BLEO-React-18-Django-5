@@ -11,8 +11,9 @@ from models.enums.ErrorSourceType import ErrorSourceType
 from models.enums.EnergyLevelType import EnergyLevelType
 from models.enums.PleasantnessType import PleasantnessType
 from models.enums.MoodQuadrantType import MoodQuadrantType
-from utils.validation_utils import validate_url_bleoid
+from utils.validation_patterns import ValidationPatterns, ValidationRules
 from rest_framework.exceptions import ValidationError
+from utils.validation_patterns import ValidationPatterns
 
 class MessageOperationsView(APIView):
     """API view for operations on messages within a message day"""
@@ -20,15 +21,14 @@ class MessageOperationsView(APIView):
     def get_message_day(self, bleoid, date):
         """Get message day by bleoid and date with validation"""
         try:
-            # Validate BLEOID format first
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
-            date_obj = datetime.strptime(date, '%d-%m-%Y')
+            date_obj = datetime.strptime(date, ValidationRules.STANDARD_DATE_FORMAT)
             message_date = datetime(date_obj.year, date_obj.month, date_obj.day)
             
             db = MongoDB.get_instance().get_collection('MessagesDays')
             return db.find_one({
-                "from_bleoid": validated_bleoid,  # Use validated BLEOID
+                "from_bleoid": validated_bleoid,
                 "date": message_date
             })
         except Exception:
@@ -36,9 +36,11 @@ class MessageOperationsView(APIView):
     
     def put(self, request, bleoid, date, message_id=None):
         """Update messages with URL BLEOID validation"""
+        validated_bleoid = bleoid  # Fallback value
+        
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Log request
             if message_id is not None:
@@ -60,7 +62,6 @@ class MessageOperationsView(APIView):
             message_day = self.get_message_day(validated_bleoid, date)
             
             if not message_day:
-                # Log not found error
                 Logger.debug_error(
                     f"No message day found for bleoid={validated_bleoid} on date {date} during message update",
                     404,
@@ -86,7 +87,6 @@ class MessageOperationsView(APIView):
                         break
                 
                 if message_index is None:
-                    # Log message not found
                     Logger.debug_error(
                         f"Message with ID={message_id} not found for bleoid={validated_bleoid} on date {date}",
                         404,
@@ -101,7 +101,6 @@ class MessageOperationsView(APIView):
                 # Use serializer for validation
                 serializer = MessageInfosSerializer(data=data, partial=True)
                 if not serializer.is_valid():
-                    # Enhanced error logging for message type validation
                     error_details = []
                     if 'type' in serializer.errors:
                         error_details.append(f"Message type: {serializer.errors['type']}")
@@ -118,7 +117,6 @@ class MessageOperationsView(APIView):
                         errors=serializer.errors
                     ).to_response(status.HTTP_400_BAD_REQUEST)
                 
-                # Get validated data
                 validated_data = serializer.validated_data
                 
                 # Update the message (preserve id and any non-provided fields)
@@ -131,7 +129,6 @@ class MessageOperationsView(APIView):
                     {"$set": {"messages": messages}}
                 )
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"Message ID={message_id} updated successfully for date {date}",
@@ -139,7 +136,6 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Prepare response
                 updated_message = messages[message_index]
                 response_serializer = MessageInfosSerializer(updated_message)
                 
@@ -151,7 +147,6 @@ class MessageOperationsView(APIView):
             else:
                 # Replace all messages
                 if 'messages' not in data or not isinstance(data['messages'], list):
-                    # Log validation error
                     Logger.debug_error(
                         f"Missing 'messages' array when replacing messages for bleoid={validated_bleoid} on date {date}",
                         400,
@@ -163,7 +158,6 @@ class MessageOperationsView(APIView):
                         message="Request must include a 'messages' array"
                     ).to_response(status.HTTP_400_BAD_REQUEST)
                 
-                # Validate each message with serializer
                 new_messages = data['messages']
                 processed_messages = []
                 max_id = 0
@@ -171,7 +165,6 @@ class MessageOperationsView(APIView):
                 for i, msg in enumerate(new_messages):
                     serializer = MessageInfosSerializer(data=msg)
                     if not serializer.is_valid():
-                        # Log validation error
                         Logger.debug_error(
                             f"Invalid message at index {i} when replacing messages: {serializer.errors}",
                             400,
@@ -184,10 +177,8 @@ class MessageOperationsView(APIView):
                             errors=serializer.errors
                         ).to_response(status.HTTP_400_BAD_REQUEST)
                     
-                    # Get validated data
                     validated_msg = serializer.validated_data
                     
-                    # Add or preserve ID
                     if 'id' in msg and isinstance(msg['id'], int):
                         msg_id = msg['id']
                     else:
@@ -197,13 +188,11 @@ class MessageOperationsView(APIView):
                     validated_msg['id'] = msg_id
                     processed_messages.append(validated_msg)
                 
-                # Update in database
                 result = db.update_one(
                     {"_id": message_day['_id']},
                     {"$set": {"messages": processed_messages}}
                 )
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"Replaced all messages for date {date} - now {len(processed_messages)} messages",
@@ -211,14 +200,11 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Get updated document
                 updated_message_day = db.find_one({"_id": message_day['_id']})
                 
-                # Format for response
                 if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
-                    updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
+                    updated_message_day['date'] = updated_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
-                # Use serializer for messages in response
                 messages = updated_message_day.get('messages', [])
                 message_serializer = MessageInfosSerializer(messages, many=True)
                 
@@ -237,8 +223,17 @@ class MessageOperationsView(APIView):
                     message="All messages replaced successfully"
                 ).to_response()
             
+        except ValidationError as e:
+            Logger.debug_error(
+                f"Invalid BLEOID format in URL: {bleoid} - {str(e)}",
+                400,
+                bleoid,
+                ErrorSourceType.SERVER.value
+            )
+            return BLEOResponse.validation_error(
+                message=f"Invalid BLEOID format: {bleoid}"
+            ).to_response(status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Log error
             Logger.debug_error(
                 f"Failed to update message(s) for bleoid={validated_bleoid} on date {date}: {str(e)}",
                 500,
@@ -252,9 +247,11 @@ class MessageOperationsView(APIView):
     
     def delete(self, request, bleoid, date, message_id=None):
         """Delete messages with URL BLEOID validation"""
+        validated_bleoid = bleoid  # Fallback value
+        
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Log request
             if message_id is not None:
@@ -275,7 +272,6 @@ class MessageOperationsView(APIView):
             message_day = self.get_message_day(validated_bleoid, date)
             
             if not message_day:
-                # Log not found error
                 Logger.debug_error(
                     f"No message day found for bleoid={validated_bleoid} on date {date} during message deletion",
                     404,
@@ -296,7 +292,6 @@ class MessageOperationsView(APIView):
                 updated_messages = [msg for msg in messages if msg.get('id') != message_id]
                 
                 if len(messages) == len(updated_messages):
-                    # Log message not found
                     Logger.debug_error(
                         f"Message with ID={message_id} not found for bleoid={validated_bleoid} on date {date} during deletion",
                         404,
@@ -307,13 +302,12 @@ class MessageOperationsView(APIView):
                     return BLEOResponse.not_found(
                         message=f"For User with bleoid {validated_bleoid} and at date {date}, message with ID {message_id} not found"
                     ).to_response(status.HTTP_404_NOT_FOUND)
-                # Update in database
+                
                 result = db.update_one(
                     {"_id": message_day['_id']},
                     {"$set": {"messages": updated_messages}}
                 )
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"Message with ID={message_id} deleted successfully from date {date}",
@@ -321,13 +315,11 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Get updated document for response
                 updated_message_day = db.find_one({"_id": message_day['_id']})
                 
                 if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
-                    updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
+                    updated_message_day['date'] = updated_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
-                # Serialize messages for response
                 messages = updated_message_day.get('messages', [])
                 message_serializer = MessageInfosSerializer(messages, many=True)
                 
@@ -352,7 +344,6 @@ class MessageOperationsView(APIView):
                     {"$set": {"messages": []}}
                 )
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"All messages deleted successfully for date {date}",
@@ -360,11 +351,10 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Get updated document for response
                 updated_message_day = db.find_one({"_id": message_day['_id']})
                 
                 if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
-                    updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
+                    updated_message_day['date'] = updated_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
                 
                 response_data = {
                     'from_bleoid': updated_message_day['from_bleoid'],
@@ -381,8 +371,17 @@ class MessageOperationsView(APIView):
                     message="All messages deleted successfully"
                 ).to_response()
             
+        except ValidationError as e:
+            Logger.debug_error(
+                f"Invalid BLEOID format in URL: {bleoid} - {str(e)}",
+                400,
+                bleoid,
+                ErrorSourceType.SERVER.value
+            )
+            return BLEOResponse.validation_error(
+                message=f"Invalid BLEOID format: {bleoid}"
+            ).to_response(status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Log error
             Logger.debug_error(
                 f"Failed to delete message(s) for bleoid={validated_bleoid} on date {date}: {str(e)}",
                 500,
@@ -396,11 +395,12 @@ class MessageOperationsView(APIView):
     
     def post(self, request, bleoid, date):
         """Add new messages with URL BLEOID validation"""
+        validated_bleoid = bleoid  # Fallback value
+        
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
-            # Log request
             Logger.debug_user_action(
                 validated_bleoid,
                 f"Adding new message(s) for date {date}",
@@ -412,7 +412,6 @@ class MessageOperationsView(APIView):
             message_day = self.get_message_day(validated_bleoid, date)
             
             if not message_day:
-                # Log not found error
                 Logger.debug_error(
                     f"No message day found for bleoid={validated_bleoid} on date {date} when adding messages",
                     404,
@@ -426,27 +425,21 @@ class MessageOperationsView(APIView):
             
             db = MongoDB.get_instance().get_collection('MessagesDays')
             
-            # Get current messages
             current_messages = message_day.get('messages', [])
             
-            # Get new messages to add
             new_messages = []
             if 'messages' in data and isinstance(data['messages'], list):
                 new_messages = data['messages']
             elif not isinstance(data, list):
-                # Single message in request body
                 new_messages = [data]
             else:
-                # Array of messages directly in request body
                 new_messages = data
                 
-            # Validate new messages with serializer
             validated_messages = []
             
             for i, msg in enumerate(new_messages):
                 serializer = MessageInfosSerializer(data=msg)
                 if not serializer.is_valid():
-                    # Log validation error
                     Logger.debug_error(
                         f"Invalid message at index {i} when adding messages: {serializer.errors}",
                         400,
@@ -461,32 +454,26 @@ class MessageOperationsView(APIView):
                     
                 validated_messages.append(serializer.validated_data)
             
-            # Find the highest existing ID
             max_id = 0
             for msg in current_messages:
                 if 'id' in msg and isinstance(msg['id'], int) and msg['id'] > max_id:
                     max_id = msg['id']
             
-            # Generate IDs for new messages
             for msg in validated_messages:
                 if 'id' not in msg or not isinstance(msg['id'], int):
                     max_id += 1
                     msg['id'] = max_id
                 
-                # Add created_at if not present
                 if 'created_at' not in msg:
                     msg['created_at'] = datetime.now()
             
-            # Combine existing and new messages
             updated_messages = current_messages + validated_messages
             
-            # Update in database
             db.update_one(
                 {"_id": message_day['_id']},
                 {"$set": {"messages": updated_messages}}
             )
             
-            # Log success
             Logger.debug_user_action(
                 validated_bleoid,
                 f"Added {len(validated_messages)} new message(s) for date {date}",
@@ -494,17 +481,13 @@ class MessageOperationsView(APIView):
                 201
             )
             
-            # Get updated document
             updated_message_day = db.find_one({"_id": message_day['_id']})
             
-            # Format for response
             if 'date' in updated_message_day and isinstance(updated_message_day['date'], datetime):
-                updated_message_day['date'] = updated_message_day['date'].strftime('%d-%m-%Y')
+                updated_message_day['date'] = updated_message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)
             
-            # Use serializer for messages in response
             messages = updated_message_day.get('messages', [])
 
-            # Format datetime objects to strings for JSON serialization
             for msg in messages:
                 if 'created_at' in msg and isinstance(msg['created_at'], datetime):
                     msg['created_at'] = msg['created_at'].strftime('%Y-%m-%dT%H:%M:%S')
@@ -526,8 +509,17 @@ class MessageOperationsView(APIView):
                 message=f"{len(validated_messages)} message(s) added successfully"
             ).to_response(status.HTTP_201_CREATED)
             
+        except ValidationError as e:
+            Logger.debug_error(
+                f"Invalid BLEOID format in URL: {bleoid} - {str(e)}",
+                400,
+                bleoid,
+                ErrorSourceType.SERVER.value
+            )
+            return BLEOResponse.validation_error(
+                message=f"Invalid BLEOID format: {bleoid}"
+            ).to_response(status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Log error
             Logger.debug_error(
                 f"Failed to add message(s) for bleoid={validated_bleoid} on date {date}: {str(e)}",
                 500,
@@ -541,9 +533,11 @@ class MessageOperationsView(APIView):
     
     def get(self, request, bleoid, date=None, message_id=None):
         """Get messages with URL BLEOID validation"""
+        validated_bleoid = bleoid  # Fallback value
+        
         try:
             # Validate BLEOID from URL parameter
-            validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+            validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
             
             # Log request based on which case we're handling
             if date and message_id is not None:
@@ -572,7 +566,6 @@ class MessageOperationsView(APIView):
             if date and message_id is not None:
                 message_day = self.get_message_day(validated_bleoid, date)
                 if not message_day:
-                    # Log not found error
                     Logger.debug_error(
                         f"No message day found for bleoid={validated_bleoid} on date {date} when getting message {message_id}",
                         404,
@@ -587,7 +580,6 @@ class MessageOperationsView(APIView):
                 message_id = int(message_id)
                 for msg in message_day.get('messages', []):
                     if msg.get('id') == message_id:
-                        # Log success
                         Logger.debug_user_action(
                             validated_bleoid,
                             f"Message with ID={message_id} retrieved successfully for date {date}",
@@ -595,14 +587,12 @@ class MessageOperationsView(APIView):
                             200
                         )
                         
-                        # Use serializer for single message response
                         serializer = MessageInfosSerializer(msg)
                         return BLEOResponse.success(
                             data=serializer.data,
                             message=f"Message retrieved successfully"
                         ).to_response()
                 
-                # Log message not found
                 Logger.debug_error(
                     f"Message with ID={message_id} not found for bleoid={validated_bleoid} on date {date}",
                     404,
@@ -618,7 +608,6 @@ class MessageOperationsView(APIView):
             elif date:
                 message_day = self.get_message_day(validated_bleoid, date)
                 if not message_day:
-                    # Log not found error
                     Logger.debug_error(
                         f"No message day found for bleoid={validated_bleoid} on date {date} when listing messages",
                         404,
@@ -632,7 +621,6 @@ class MessageOperationsView(APIView):
                     
                 messages = message_day.get('messages', [])
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"Retrieved {len(messages)} messages for date {date}",
@@ -640,10 +628,8 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Use serializer for messages array
                 message_serializer = MessageInfosSerializer(messages, many=True)
                 
-                # Calculate quadrant if energy_level and pleasantness are available
                 quadrant = None
                 if 'energy_level' in message_day and message_day['energy_level'] and 'pleasantness' in message_day and message_day['pleasantness']:
                     try:
@@ -672,11 +658,9 @@ class MessageOperationsView(APIView):
             else:
                 db = MongoDB.get_instance().get_collection('MessagesDays')
                 
-                # Find all message days for this user
                 message_days = list(db.find({"from_bleoid": validated_bleoid}))
                 
                 if not message_days:
-                    # Log not found error
                     Logger.debug_error(
                         f"No message days found for bleoid={validated_bleoid}",
                         404,
@@ -688,12 +672,10 @@ class MessageOperationsView(APIView):
                         message=f"No message days found for bleoid={validated_bleoid}"
                     ).to_response(status.HTTP_404_NOT_FOUND)
                     
-                # Collect all messages with their dates
                 result = []
                 for day in message_days:
-                    date_str = day['date'].strftime('%d-%m-%Y') if isinstance(day['date'], datetime) else str(day['date'])
+                    date_str = day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT) if isinstance(day['date'], datetime) else str(day['date'])
                     
-                    # Calculate quadrant if energy_level and pleasantness are available
                     quadrant = None
                     if 'energy_level' in day and day['energy_level'] and 'pleasantness' in day and day['pleasantness']:
                         try:
@@ -704,7 +686,6 @@ class MessageOperationsView(APIView):
                             pass
                     
                     for msg in day.get('messages', []):
-                        # Add date and recipient info to each message
                         msg_with_date = msg.copy()
                         msg_with_date['date'] = date_str
                         msg_with_date['from_bleoid'] = day.get('from_bleoid')
@@ -715,7 +696,6 @@ class MessageOperationsView(APIView):
                         msg_with_date['quadrant'] = quadrant
                         result.append(msg_with_date)
                 
-                # Log success
                 Logger.debug_user_action(
                     validated_bleoid,
                     f"Retrieved {len(result)} messages from {len(message_days)} dates",
@@ -723,7 +703,6 @@ class MessageOperationsView(APIView):
                     200
                 )
                 
-                # Use serializer for messages array
                 message_serializer = MessageInfosSerializer(result, many=True)
                 
                 return BLEOResponse.success(
@@ -747,7 +726,6 @@ class MessageOperationsView(APIView):
                 message=f"Invalid BLEOID format: {bleoid}"
             ).to_response(status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Log error
             Logger.debug_error(
                 f"Failed to retrieve message(s) for bleoid={validated_bleoid}" + 
                 (f" on date {date}" if date else "") +

@@ -17,6 +17,7 @@ import jwt
 import uuid
 from datetime import datetime, timedelta, timezone
 import os
+from utils.validation_patterns import ValidationRules
 
 class EmailVerificationView(APIView):
     """API view for email verification system"""
@@ -85,7 +86,7 @@ class EmailVerificationView(APIView):
                 'type': 'email_verification',
                 'jti': str(uuid.uuid4()),
                 'iat': datetime.now(timezone.utc).timestamp(),
-                'exp': (datetime.now(timezone.utc) + timedelta(hours=24)).timestamp()
+                'exp': (datetime.now(timezone.utc) + timedelta(hours=ValidationRules.JWT_EXPIRATION['email_verification'])).timestamp()
             }
             
             verification_token = jwt.encode(
@@ -101,7 +102,7 @@ class EmailVerificationView(APIView):
                 'email': email,
                 'token': verification_token,
                 'created_at': datetime.now(timezone.utc),
-                'expires_at': datetime.now(timezone.utc) + timedelta(hours=24),
+                'expires_at': datetime.now(timezone.utc) + timedelta(hours=ValidationRules.JWT_EXPIRATION['email_verification']),
                 'verified': False,
                 'attempts': 0
             }

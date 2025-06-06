@@ -6,7 +6,7 @@ from utils.mongodb_utils import MongoDB
 from api.serializers import DebugLogSerializer
 from models.enums.LogType import LogType
 from datetime import datetime, timedelta
-from utils.validation_utils import validate_url_bleoid
+from utils.validation_patterns import ValidationPatterns
 from rest_framework.exceptions import ValidationError
 from models.enums.ErrorSourceType import ErrorSourceType
 
@@ -131,7 +131,7 @@ class AdminLogsView(APIView):
             
             if bleoid:
                 try:
-                    validated_bleoid = validate_url_bleoid(bleoid, "bleoid")
+                    validated_bleoid = ValidationPatterns.validate_url_bleoid(bleoid, "bleoid")
                     query['bleoid'] = validated_bleoid
                 except ValidationError as e:
                     Logger.debug_error(

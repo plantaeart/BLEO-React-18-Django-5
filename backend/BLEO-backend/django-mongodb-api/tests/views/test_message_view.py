@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from django.urls import path
 from django.test import override_settings
 import bson
+from utils.validation_patterns import ValidationRules
 
 # Set up URL configuration for testing
 urlpatterns = [
@@ -255,7 +256,7 @@ class MessageViewTest(BLEOBaseTest):
                 try:
                     result = self.db_messages_days.insert_one(message_day)
                     self.message_day_ids.append(result.inserted_id)
-                    print(f"  ✅ Created test message day {i+1} from {message_day['from_bleoid']} to {message_day['to_bleoid']} on {message_day['date'].strftime('%d-%m-%Y')}")
+                    print(f"  ✅ Created test message day {i+1} from {message_day['from_bleoid']} to {message_day['to_bleoid']} on {message_day['date'].strftime(ValidationRules.STANDARD_DATE_FORMAT)}")
                 except Exception as e:
                     print(f"  ❌ Failed to create test message day {i+1}: {str(e)}")
                     raise
@@ -278,7 +279,7 @@ class MessageViewTest(BLEOBaseTest):
     
     def format_date(self, date):
         """Format a datetime object to DD-MM-YYYY string"""
-        return date.strftime('%d-%m-%Y')
+        return date.strftime(ValidationRules.STANDARD_DATE_FORMAT)
     
     def get_yesterday_date_str(self):
         """Get yesterday's date as DD-MM-YYYY string"""
